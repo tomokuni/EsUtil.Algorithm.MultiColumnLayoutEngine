@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>embedded</DebugType>
+    <PackageTags>Vertical;multi;column;layout;</PackageTags>
+    <EnforceCodeStyleInBuild>True</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <!-- プロダクト情報 -->
+  <PropertyGroup>
+    <Product>MultiColumnLayoutEngine</Product>
+    <Version>1.0.0</Version>
+    <Description>Vertical multi-column layout algorithm engine with support for multiple optimization strategies</Description>
+    <RootNamespace>EsUtil.Algorithm</RootNamespace>
+    <AssemblyName>EsUtil.Algorithm.MultiColumnLayoutEngine</AssemblyName>
+  </PropertyGroup>
+
+  <!-- パッケージ情報 -->
+  <PropertyGroup>
+    <PackageId>$(AssemblyName)</PackageId>
+    <PackageProjectUrl>https://github.com/tomokuni/EsUtil/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/tomokuni/EsUtil/</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Authors>SEKIYA Tomokuni</Authors>
+    <Company>Estable</Company>
+    <Copyright>SEKIYA Tomokuni</Copyright>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- 追加アイテム -->
+  <ItemGroup>
+    <Content Include="..\README.md" Pack="true" PackagePath="" />
+    <Content Include="..\.github\copilot-instructions.md" />
+  </ItemGroup>
+
+  <!-- パッケージ -->
+
+</Project>

@@ -1,0 +1,44 @@
+# Build results
+bin/
+obj/
+*.DotSettings.user
+
+# Visual Studio cache/options
+.vs/
+*.user
+*.suo
+*.cache
+*.ldf
+*.sdf
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+.nuget/
+
+# Local NuGet source
+local-nuget/
+
+# BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
+# Test Results
+TestResults/
+.trx
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
+*.log
+appsettings.local.json
+PublishProfiles/

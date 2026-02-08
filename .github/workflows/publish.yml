@@ -1,0 +1,70 @@
+name: Publish to NuGet
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+        source-url: https://api.nuget.org/v3/index.json
+      env:
+        DOTNET_INSTALL_DIR: ./dotnet
+
+    # 1. csproj から現在のバージョンを取得
+    - name: Get Version
+      id: get_version
+      run: |
+        VERSION=$(grep -oPm1 "(?<=<Version>)[^<]+" src/ZenHanConverter.csproj)
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    # 2. 最新のタグを取得して比較
+    - name: Check if version is new
+      id: check_version
+      run: |
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
+        echo "Latest tag: $LATEST_TAG"
+        echo "Current version: v${{ env.VERSION }}"
+        if [ "v${{ env.VERSION }}" != "$LATEST_TAG" ]; then
+          echo "is_new_version=true" >> $GITHUB_OUTPUT
+        else
+          echo "is_new_version=false" >> $GITHUB_OUTPUT
+        fi
+
+    # 3. バージョンが新しい場合のみ実行
+    - name: Build and Pack
+      if: steps.check_version.outputs.is_new_version == 'true'
+      run: dotnet pack src/ZenHanConverter.csproj -c Release -o ./artifacts
+
+    - name: Create Git Tag
+      if: steps.check_version.outputs.is_new_version == 'true'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag "v${{ env.VERSION }}"
+        git push origin "v${{ env.VERSION }}"
+
+    - name: Create GitHub Release
+      if: steps.check_version.outputs.is_new_version == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: "v${{ env.VERSION }}"
+        files: artifacts/*.nupkg
+        generate_release_notes: true
+
+    - name: Push to NuGet
+      if: steps.check_version.outputs.is_new_version == 'true'
+      run: dotnet nuget push artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

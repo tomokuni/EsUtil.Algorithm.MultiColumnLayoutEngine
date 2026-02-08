@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/ソリューション項目/">
+    <File Path="README.md" />
+    <File Path="Spec.md" />
+  </Folder>
+  <Project Path="src/MultiColumnLayoutEngine.csproj" />
+  <Project Path="test/MultiColumnLayoutEngine.Test.csproj" />
+</Solution>

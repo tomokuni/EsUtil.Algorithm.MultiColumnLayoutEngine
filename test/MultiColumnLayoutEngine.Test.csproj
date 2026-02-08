@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <StartupObject>EsUtil.Algorithm.MultiColumnLayoutEngineTest.Benchmark</StartupObject>
+  </PropertyGroup>
+
+  <!-- プロダクト情報 -->
+  <PropertyGroup>
+    <AssemblyName>EsUtil.Algorithm.MultiColumnLayoutEngine.Test</AssemblyName>
+    <RootNamespace>EsUtil.Algorithm.MultiColumnLayoutEngine.Test</RootNamespace>
+  </PropertyGroup>
+
+  <!-- パッケージ情報 -->
+  <PropertyGroup>
+    <PackageId>$(AssemblyName)</PackageId>
+    <PackageProjectUrl>https://github.com/tomokuni/EsUtil/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/tomokuni/EsUtil/</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Authors>SEKIYA Tomokuni</Authors>
+    <Company>Estable</Company>
+    <Copyright>SEKIYA Tomokuni</Copyright>
+    <PublishTrimmed>False</PublishTrimmed>
+    <PublishAot>False</PublishAot>
+    <GenerateDocumentationFile>False</GenerateDocumentationFile>
+    <IsPublishable>False</IsPublishable>
+  </PropertyGroup>
+
+  <!-- テスト対象プロジェクトに依存 -->
+  <ItemGroup>
+    <ProjectReference Include="../src/MultiColumnLayoutEngine.csproj" />
+  </ItemGroup>
+
+  <!-- テストライブラリ -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageReference Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.3.36714.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
