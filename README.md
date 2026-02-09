@@ -1,4 +1,7 @@
-# VerticalMultiColumnLayout - ユーザー向け利用仕様書
+# VerticalMultiColumnLayout
+[![GitHub release](https://img.shields.io/github/v/release/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine)](https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/releases)
+[![NuGet Version](https://img.shields.io/nuget/v/EsUtil.Algorithm.MultiColumnLayoutEngine)](https://www.nuget.org/packages/EsUtil.Algorithm.MultiColumnLayoutEngine/)
+[![Build](https://img.shields.io/github/actions/workflow/status/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/publish.yml)](https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/actions)
 
 ## 概要
 
