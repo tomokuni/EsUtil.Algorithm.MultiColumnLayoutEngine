@@ -18,6 +18,7 @@ jobs:
         fetch-depth: 0
 
     # .NET SDK をセットアップ
+    # NUGET_AUTH_TOKEN を設定しないと setup-dotnet が GitHub Packages 認証でエラーを出すため必須
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -62,6 +63,14 @@ jobs:
         else
           echo "is_new_version=false" >> $GITHUB_OUTPUT
         fi
+
+    # 新しいバージョンのときだけ、すべての csproj をビルド
+    - name: Build all projects
+      if: steps.check_version.outputs.is_new_version == 'true'
+      run: |
+        for PROJ in ${{ steps.find_projects.outputs.projects }}; do
+          dotnet build "$PROJ" -c Release
+        done
 
     # 新しいバージョンのときだけ、すべての csproj を pack
     - name: Pack all projects
