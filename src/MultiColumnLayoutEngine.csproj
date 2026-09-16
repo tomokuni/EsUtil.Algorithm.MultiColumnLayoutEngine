@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- .NET 10 / C# 14 を対象とする -->
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -12,9 +13,9 @@
   </PropertyGroup>
 
   <!-- プロダクト情報 -->
+  <!-- バージョンはリポジトリルートの Directory.Build.props が単一所有する（ここでは指定しない） -->
   <PropertyGroup>
     <Product>MultiColumnLayoutEngine</Product>
-    <Version>1.0.0</Version>
     <Description>Vertical multi-column layout algorithm engine with support for multiple optimization strategies</Description>
     <RootNamespace>EsUtil.Algorithm</RootNamespace>
     <AssemblyName>EsUtil.Algorithm.MultiColumnLayoutEngine</AssemblyName>
@@ -23,21 +24,24 @@
   <!-- パッケージ情報 -->
   <PropertyGroup>
     <PackageId>$(AssemblyName)</PackageId>
-    <PackageProjectUrl>https://github.com/tomokuni/EsUtil/</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/tomokuni/EsUtil/</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Authors>SEKIYA Tomokuni</Authors>
     <Company>Estable</Company>
     <Copyright>SEKIYA Tomokuni</Copyright>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <!-- GeneratePackageOnBuild は使用しない（クリーンな状態の dotnet pack が NU5026 で失敗するため） -->
+    <!-- パッケージ化は build の後に pack を no-build で実行する（.github/workflows の build.yml / publish.yml を参照） -->
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <!-- 追加アイテム -->
   <ItemGroup>
+    <!-- README は NuGet パッケージに同梱する -->
     <Content Include="..\README.md" Pack="true" PackagePath="" />
-    <Content Include="..\.github\copilot-instructions.md" />
+    <!-- Copilot 指示書はソリューション エクスプローラーで参照するのみ（パッケージには含めない） -->
+    <Content Include="..\.github\copilot-instructions.md" Pack="false" />
   </ItemGroup>
 
   <!-- パッケージ -->

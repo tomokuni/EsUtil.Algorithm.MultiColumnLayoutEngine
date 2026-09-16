@@ -20,8 +20,36 @@ public partial class MultiColumnLayoutEngine
     /// <summary><b>フィールド変数：使用可能な列数の上限</b></summary>
     internal readonly int _columnLimit;
 
-    /// <summary><b>フィールド変数：最大アイテム幅のキャッシュ</b></summary>
-    internal double _itemsMaxWidthCached = double.NaN;
+    /// <summary><b>プロパティ：全アイテムの最大幅（キャッシュ）</b></summary>
+    /// <remarks>
+    /// 【実装の詳細】<br/>
+    /// C# 14 の field キーワードで実装した、バッキング フィールドを宣言しないキャッシュです。<br/>
+    /// 未計算の状態を double.NaN で表し、一度計算した値はプロパティ内に保持されます。<br/>
+    /// <br/>
+    /// 【最適化手法】<br/>
+    /// • 遅延計算により、IsValidWidth が呼ばれるまでアイテムを走査しない<br/>
+    /// • キャッシュにより 2 回目以降の走査コストをゼロにする<br/>
+    /// </remarks>
+    internal double ItemsMaxWidth
+    {
+        get
+        {
+            // 未計算（NaN）の場合のみ最大幅を走査して field へ保持する
+            if (double.IsNaN(field))
+            {
+                double maxWidth = 0.0;
+                foreach (var (Width, _) in _items)
+                {
+                    if (Width > maxWidth)
+                        maxWidth = Width;
+                }
+
+                field = maxWidth;
+            }
+
+            return field;
+        }
+    } = double.NaN;
 
     /// <summary><b>フィールド変数：最後の Solve() 実行時の 最大列高さ と 最小幅 と 実行時の各列のアイテム範囲</b></summary>
     internal StrategyResult _lastSolveResult = StrategyResult.Empty;
@@ -115,7 +143,7 @@ public partial class MultiColumnLayoutEngine
     /// <summary><b>最大アイテム幅が widthLimit を超えるかどうかを判定します</b></summary>
     /// <remarks>
     /// 【処理フロー】<br/>
-    /// 1. 最大幅をキャッシュから取得または計算<br/>
+    /// 1. 最大幅をキャッシュ（ItemsMaxWidth）から取得する（未計算の場合はそこで計算される）<br/>
     /// 2. widthLimit と比較<br/>
     /// <br/>
     /// 【注意点】<br/>
@@ -125,20 +153,8 @@ public partial class MultiColumnLayoutEngine
     /// <returns>最大幅 > widthLimit の場合 true</returns>
     public bool IsValidWidth(double widthLimit)
     {
-        // 最大幅をキャッシュ化
-        if (double.IsNaN(_itemsMaxWidthCached))
-        {
-            // 最大幅を計算する
-            _itemsMaxWidthCached = 0.0;
-            foreach (var (Width, _) in _items)
-            {
-                if (Width > _itemsMaxWidthCached)
-                    _itemsMaxWidthCached = Width;
-            }
-        }
-
-        // 比較して結果を返却する
-        return _itemsMaxWidthCached > widthLimit;
+        // 最大幅（キャッシュ済み）と比較して結果を返却する
+        return ItemsMaxWidth > widthLimit;
     }
 
     /// <summary><b>レイアウト計算結果の正当性を検証します</b></summary>

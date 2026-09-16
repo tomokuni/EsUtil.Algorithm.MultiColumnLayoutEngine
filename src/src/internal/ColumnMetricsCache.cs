@@ -99,9 +99,9 @@ internal sealed class ColumnMetricsCache(Size[] items, Space space, int estimate
         if (segment.StartIdx > segment.EndIdx)
             return default;
 
-        // ReadOnlySpan で配列をロック（1 回の範囲チェック）
+        // 配列から ReadOnlySpan を切り出す（C# 14 の第一級 Span により、Span を通常の型と同様に扱える）
         int length = segment.EndIdx - segment.StartIdx + 1;
-        var itemsSpan = new ReadOnlySpan<Size>(items, segment.StartIdx, length);
+        ReadOnlySpan<Size> itemsSpan = items.AsSpan(segment.StartIdx, length);
 
         // 行間スペースの合計を初期値として設定
         double totalHeight = (length - 1) * space.Row;

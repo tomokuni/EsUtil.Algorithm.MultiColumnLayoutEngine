@@ -1,0 +1,266 @@
+# EsUtil.Algorithm.MultiColumnLayoutEngine のリリースワークフロー
+#
+# 自動インクリメントは行わない。実行は手動（Actions → Release → Run workflow）のみ。
+# 責務ごとにジョブを分ける。失敗してもタグと Release は作成されない。
+#
+#   verify  … 前提検証（ブランチ / ゲート / バージョン / タグ未作成）
+#   publish … 全パッケージを pack して NuGet.org / GitHub Packages へ公開（実装は publish.yml に集約）
+#   release … バージョンをコミットして push し、タグと GitHub Release を作成する
+#
+# 順序の意図: 取り消せない外部公開（NuGet.org）を、バージョンコミットとタグ作成より前に置く。
+# これにより、公開に失敗してもタグが消費されず同じバージョンで再実行できる。
+# NuGet.org / GitHub Packages への push は --skip-duplicate で冪等なため、
+# タグ作成後に失敗した場合も同じバージョンで再実行すれば未完了分だけが進む。
+#
+# GITHUB_TOKEN による push はワークフローを再トリガーしないため、Build が連鎖起動しない。
+name: Release
+
+on:
+  # 手動実行のみ。バージョンは入力で指定する（自動インクリメントは行わない）
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'リリースするバージョン（例: 1.0.1 / 1.1.0 / 2.0.0 / 1.2.3-rc.1）'
+        required: true
+        type: string
+
+# リリース処理は同時に 1 つだけ実行する
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # ────────────────────────────────────────────────────────────
+  # 1. 前提検証
+  # ────────────────────────────────────────────────────────────
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Build（ゲート）の実行結果の参照
+      actions: read
+    outputs:
+      version: ${{ steps.verify.outputs.version }}
+      tag: ${{ steps.verify.outputs.tag }}
+      prerelease: ${{ steps.verify.outputs.prerelease }}
+      notes_start_tag: ${{ steps.verify.outputs.notes_start_tag }}
+      backport: ${{ steps.verify.outputs.backport }}
+      version_file: ${{ steps.config.outputs.version_file }}
+      product: ${{ steps.config.outputs.product }}
+      release_notes: ${{ steps.config.outputs.release_notes }}
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v5
+        with:
+          # タグの列挙のため全履歴を取得する
+          fetch-depth: 0
+
+      - name: release-config.json を読む
+        id: config
+        run: |
+          echo "version_file=$(jq -r .versionFile .github/release-config.json)" >> "$GITHUB_OUTPUT"
+          echo "product=$(jq -r .product .github/release-config.json)" >> "$GITHUB_OUTPUT"
+          echo "release_notes=$(jq -r .releaseNotes .github/release-config.json)" >> "$GITHUB_OUTPUT"
+
+      - name: バージョンとブランチを検証
+        id: verify
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          $version = $env:INPUT_VERSION.Trim()
+          if ([string]::IsNullOrEmpty($version)) { throw 'バージョンが入力されていません。' }
+
+          # 形式・ブランチ・系列と単調性（既存タグより大きいこと）・タグ未作成を検証する
+          $info = & ./.github/scripts/verify-release-version.ps1 -Version $version -Branch $env:BRANCH | ConvertFrom-Json
+
+          # 注意: 文字列補間の $() の外に続くメソッド呼び出しは評価されないため、値を変数へ入れてから出力する
+          $isPrerelease = if ($info.prerelease) { 'true' } else { 'false' }
+          $isBackport = if ($env:BRANCH -eq 'main') { 'false' } else { 'true' }
+
+          "version=$($info.version)" >> $env:GITHUB_OUTPUT
+          "tag=$($info.tag)" >> $env:GITHUB_OUTPUT
+          "notes_start_tag=$($info.notesStartTag)" >> $env:GITHUB_OUTPUT
+          # プレリリース（例: 1.2.3-rc.1）は GitHub 上でもプレリリースとして登録する
+          "prerelease=$isPrerelease" >> $env:GITHUB_OUTPUT
+          # main 以外（release/X.Y）からのリリースはバックポートとして扱う（Latest にしない）
+          "backport=$isBackport" >> $env:GITHUB_OUTPUT
+
+      - name: Build ワークフローの成功を確認（ゲート）
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          $sha = $env:GITHUB_SHA
+          $workflow = (Get-Content .github/release-config.json -Raw | ConvertFrom-Json).gateWorkflow
+          Write-Host "リリース対象コミット: $sha（ブランチ: $env:BRANCH / ゲート: $workflow）"
+
+          # 同一ブランチで成功した実行から、対象コミットをビルドしたものを探す
+          $runs = gh run list --workflow=$workflow --branch=$env:BRANCH --status=success --limit=50 --json headSha,event
+          if ($LASTEXITCODE -ne 0) {
+            throw "実行一覧の取得に失敗しました（gh の権限や接続を確認してください）"
+          }
+
+          $hit = ($runs | ConvertFrom-Json) | Where-Object { $_.headSha -eq $sha } | Select-Object -First 1
+
+          if (-not $hit) {
+            throw "コミット $sha に対する $workflow の成功実行がありません。先に $env:BRANCH へ push して Build を成功させてください。"
+          }
+
+          Write-Host "ゲートOK: $workflow が成功しています（event: $($hit.event)）"
+
+  # ────────────────────────────────────────────────────────────
+  # 2. pack して NuGet.org / GitHub Packages へ公開（実装は publish.yml に集約）
+  # ────────────────────────────────────────────────────────────
+  publish:
+    needs: verify
+    # 呼び出される publish.yml が必要とする権限をここで付与する（それ以上は与えない）
+    permissions:
+      contents: read
+      # NuGet.org の Trusted Publishing（OIDC）
+      id-token: write
+      # GitHub Packages
+      packages: write
+    uses: ./.github/workflows/publish.yml
+    with:
+      # コミット前でも公開物へバージョンを反映する（公開物とリリースのバージョンを一致させる）
+      version: ${{ needs.verify.outputs.version }}
+
+  # ────────────────────────────────────────────────────────────
+  # 3. バージョンのコミット・push と、タグ + GitHub Release の作成
+  # ────────────────────────────────────────────────────────────
+  release:
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      # ブランチ push、タグ作成、Release 作成
+      contents: write
+      # バージョンコミットの検証（Build）の起動
+      actions: write
+    steps:
+      - name: チェックアウト
+        uses: actions/checkout@v5
+        with:
+          # バージョンコミットの push のため全履歴を取得する
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 成果物をダウンロード
+        uses: actions/download-artifact@v7
+        with:
+          path: assets
+          # 各パッケージの成果物を 1 つのフォルダへ集約する（ファイル名は配布名のまま）
+          merge-multiple: true
+
+      - name: バージョンをコミット
+        id: apply
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+          VERSION_FILE: ${{ needs.verify.outputs.version_file }}
+        run: |
+          & ./.github/scripts/set-version.ps1 -Version $env:VERSION -VersionFile $env:VERSION_FILE | Out-Null
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # publish の作業ツリーにのみ適用していた場合は、ここで初めて変更が生じる
+          if (git status --porcelain) {
+            git commit -am "リリースバージョンを $env:VERSION へ更新"
+            Write-Host "バージョンをコミットしました"
+          }
+          else {
+            Write-Host "バージョンは既に設定済みのため、コミットをスキップしました"
+          }
+
+          "sha=$((git rev-parse HEAD).Trim())" >> $env:GITHUB_OUTPUT
+
+      - name: ブランチを push
+        shell: pwsh
+        env:
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ steps.apply.outputs.sha }}
+        run: |
+          git push origin "HEAD:$env:BRANCH"
+          Write-Host "push しました: $env:SHA -> $env:BRANCH"
+
+      - name: GitHub Release を作成
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.verify.outputs.tag }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          PRODUCT: ${{ needs.verify.outputs.product }}
+          RELEASE_NOTES: ${{ needs.verify.outputs.release_notes }}
+          NOTES_START_TAG: ${{ needs.verify.outputs.notes_start_tag }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          BACKPORT: ${{ needs.verify.outputs.backport }}
+          SHA: ${{ steps.apply.outputs.sha }}
+        run: |
+          # 添付する配布物は publish ジョブが保管した nupkg（パッケージの定義に依存しない）
+          $assets = @(Get-ChildItem -Path 'assets' -File -Filter '*.nupkg' | Select-Object -ExpandProperty FullName)
+          if ($assets.Count -eq 0) { throw '添付する成果物がありません。' }
+
+          # タグは gh に作成させる（--target で公開対象コミットを指定する）
+          $ghArgs = @(
+            'release', 'create', $env:TAG,
+            '--title', "$env:PRODUCT $env:VERSION",
+            '--target', $env:SHA,
+            '--generate-notes'
+          )
+
+          # 先頭に付ける説明は設定（release-config.json）が持つ
+          if ($env:RELEASE_NOTES) { $ghArgs += @('--notes', $env:RELEASE_NOTES) }
+          # リリースノートの範囲を系列内に限定する（バックポート時に他系列の差分を混ぜない）
+          if ($env:NOTES_START_TAG) { $ghArgs += @('--notes-start-tag', $env:NOTES_START_TAG) }
+          # プレリリースは Latest にしない
+          if ($env:PRERELEASE -eq 'true') { $ghArgs += @('--prerelease') }
+          # バックポート（release/X.Y）は Latest を更新しない
+          if ($env:BACKPORT -eq 'true') { $ghArgs += @('--latest=false') }
+
+          $ghArgs += $assets
+
+          & gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { throw "GitHub Release の作成に失敗しました（exit $LASTEXITCODE）" }
+
+          Write-Host "リリースを作成しました: $env:TAG（添付 $($assets.Count) 件）"
+
+      # バージョンコミットは GITHUB_TOKEN の push では Build が起動しない（workflow_dispatch は例外として起動する）。
+      # バージョンコミットの検証（ビルドとテスト）を行い、チェックを付けて次のリリースのゲートを満たす。
+      - name: バージョンコミットの検証を起動
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          $workflow = (Get-Content .github/release-config.json -Raw | ConvertFrom-Json).gateWorkflow
+
+          gh workflow run $workflow --ref $env:BRANCH
+          if ($LASTEXITCODE -ne 0) { throw "$workflow の起動に失敗しました（exit $LASTEXITCODE）" }
+
+          Write-Host "$workflow を起動しました（ブランチ: $env:BRANCH）"
+          Write-Host "実行完了は待たない（Actions で結果を確認できる）"
+
+      - name: 結果をまとめ
+        if: always()
+        shell: pwsh
+        env:
+          SUMMARY_VERSION: ${{ needs.verify.outputs.version }}
+          SUMMARY_TAG: ${{ needs.verify.outputs.tag }}
+          SUMMARY_SHA: ${{ steps.apply.outputs.sha }}
+          SUMMARY_PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+          SUMMARY_BACKPORT: ${{ needs.verify.outputs.backport }}
+        run: |
+          @"
+          ## リリース結果
+
+          | 項目 | 値 |
+          | --- | --- |
+          | バージョン | `$env:SUMMARY_VERSION` |
+          | タグ | `$env:SUMMARY_TAG` |
+          | 対象コミット | `$env:SUMMARY_SHA` |
+          | プレリリース | $env:SUMMARY_PRERELEASE |
+          | バックポート | $env:SUMMARY_BACKPORT |
+          "@ >> $env:GITHUB_STEP_SUMMARY

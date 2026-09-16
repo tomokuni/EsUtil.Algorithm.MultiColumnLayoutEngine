@@ -34,7 +34,19 @@ MultiColumnLayoutEngine（パブリック）
 ├── GreedyLayoutStrategy（内部クラス）: Greedy 実装
 ├── BinarySearchLayoutStrategy（内部クラス）: BinarySearch 実装
 └── Helper（内部静的クラス）: 検証・計算補助
+
+MultiColumnLayoutEngineExtensions（パブリック静的クラス）
+└── C# 14 の拡張メンバー（extension ブロック）: Solve(widthLimit, method) と状態参照プロパティ
 ```
+
+### C# 14（.NET 10）の適用箇所
+
+| 機能 | 適用箇所 | 内容 |
+| --- | --- | --- |
+| 拡張メンバー（extension ブロック） | MultiColumnLayoutEngineExtensions | 型を変更せずに Solve(widthLimit, method) と 3 つのプロパティを追加 |
+| field キーワード | MultiColumnLayoutEngineBase.ItemsMaxWidth | バッキング フィールドを宣言せずに最大幅をキャッシュ（初期値はプロパティ初期化子で double.NaN） |
+| null 条件付き代入 | MultiColumnLayoutEngine.GetBinarySearchIterationCount() | _strategyFactory が null の場合は代入自体をスキップ |
+| 第一級 Span | ColumnMetricsCache.CalcMetrics() | 配列から Span を通常の型と同様に扱う（AsSpan） |
 
 ---
 
@@ -956,3 +968,62 @@ internal static void VerifyLayoutResult(StrategyResult lastSolveResult, double w
 ```
 
 **機能：** レイアウト計算結果の正当性を検証
+
+---
+
+### 10. MultiColumnLayoutEngineExtensions クラス（パブリック静的）
+
+**責務：** C# 14 の拡張メンバー（extension ブロック）で MultiColumnLayoutEngine の操作性を補完
+
+**特徴：**
+
+- 型（MultiColumnLayoutEngine）を変更せずにメソッドとプロパティを追加できる<br/>
+- 既存のインスタンス メソッド Solve(double) とは引数の個数が異なるため、既存の呼び出しの互換性を維持する<br/>
+- 拡張プロパティは C# 14 で追加された機能（従来の拡張メソッドではメソッドしか追加できなかった）<br/>
+
+**注意点：**
+
+- Solve(widthLimit, method) は内部で CurrentMethod を切り替えるため、スレッド セーフではない<br/>
+
+#### 拡張メソッド
+
+##### Solve() (アルゴリズム指定)
+
+```csharp
+public (double UsedWidth, double MinHeight) Solve(double widthLimit, Method method)
+```
+
+**機能：** 指定したアルゴリズムで 1 回だけレイアウトを計算
+
+**処理フロー：**
+
+1. 呼び出し前の CurrentMethod を退避<br/>
+2. CurrentMethod を引数の method へ変更<br/>
+3. Solve(widthLimit) を呼び出す<br/>
+4. finally で CurrentMethod を退避した値へ戻す（例外時も復元）<br/>
+
+#### 拡張プロパティ
+
+##### ItemCount
+
+```csharp
+public int ItemCount { get; }
+```
+
+**機能：** 登録されているアイテム数を取得（内部のアイテム配列の長さ。コンストラクタで受け取った時点の件数で固定）
+
+##### ColumnCount
+
+```csharp
+public int ColumnCount { get; }
+```
+
+**機能：** 最後の Solve() 実行時の列数を取得（GetLastColumnSegments().Length。未実行は 0）
+
+##### IterationCount
+
+```csharp
+public int IterationCount { get; }
+```
+
+**機能：** 最後の BinarySearch 実行時の反復回数を取得（GetBinarySearchIterationCount() の null を 0 へ変換。未生成・対象外は 0）

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- ライブラリと同じ .NET 10 / C# 14 を対象とする -->
+    <TargetFramework>net10.0</TargetFramework>
     <IsTestProject>true</IsTestProject>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -16,8 +17,8 @@
   <!-- パッケージ情報 -->
   <PropertyGroup>
     <PackageId>$(AssemblyName)</PackageId>
-    <PackageProjectUrl>https://github.com/tomokuni/EsUtil/</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/tomokuni/EsUtil/</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Authors>SEKIYA Tomokuni</Authors>

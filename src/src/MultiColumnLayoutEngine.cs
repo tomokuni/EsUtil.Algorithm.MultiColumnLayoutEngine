@@ -130,26 +130,20 @@ public partial class MultiColumnLayoutEngine
     /// <summary><b>最後の BinarySearch Solve() 実行時の反復回数を取得します</b></summary>
     /// <remarks>
     /// 【処理フロー】<br/>
-    /// 1. StrategyFactory が null でないかチェック<br/>
-    /// 2. CurrentMethod を BinarySearch に設定<br/>
-    /// 3. Strategy を取得してメタデータを取得<br/>
+    /// 1. null 条件付き代入（C# 14）で CurrentMethod を BinarySearch に設定（未初期化なら何もしない）<br/>
+    /// 2. null 条件付きアクセスで Strategy を取得してメタデータを取得<br/>
     /// <br/>
     /// 【注意点】<br/>
-    /// BinarySearch 以外の場合、null を返します。<br/>
+    /// Strategy が未生成、または BinarySearch 以外の場合、null を返します。<br/>
     /// </remarks>
     /// <returns>最後の BinarySearch 実行時の反復回数</returns>
     public int? GetBinarySearchIterationCount()
     {
-        // StrategyFactory が初期化されていない場合、null を返却する
-        if (_strategyFactory is null)
-            return null;
+        // C# 14 の null 条件付き代入：_strategyFactory が null の場合、代入自体が実行されない
+        _strategyFactory?.CurrentMethod = Method.BinarySearch;
 
-        // CurrentMethod を BinarySearch に設定する
-        _strategyFactory.CurrentMethod = Method.BinarySearch;
-        // Strategy を取得する
-        var bsStrategy = _strategyFactory.GetStrategy();
-        // メタデータを取得する
-        int? iterationCount = bsStrategy.GetMetadata<int>(MetadataKey.BinarySearchIterationCount);
-        return iterationCount;
+        // null 条件付きアクセス：_strategyFactory が null の場合は null が返却される
+        return _strategyFactory?.GetStrategy()
+            .GetMetadata<int>(MetadataKey.BinarySearchIterationCount);
     }
 }

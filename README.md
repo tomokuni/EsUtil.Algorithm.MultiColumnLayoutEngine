@@ -1,7 +1,11 @@
+<!-- markdownlint-disable MD041 -- バッジを先頭に配置するため -->
+[![release](https://img.shields.io/github/v/release/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine?label=release)](https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/releases)
+[![nuget](https://img.shields.io/nuget/v/EsUtil.Algorithm.MultiColumnLayoutEngine?label=nuget)](https://www.nuget.org/packages/EsUtil.Algorithm.MultiColumnLayoutEngine)
+[![build](https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/actions/workflows/build.yml)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
+[![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0078D4)](https://dotnet.microsoft.com/platform/support/policy/dotnet-core)
+
 # VerticalMultiColumnLayout
-[![GitHub release](https://img.shields.io/github/v/release/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine)](https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/releases)
-[![NuGet Version](https://img.shields.io/nuget/v/EsUtil.Algorithm.MultiColumnLayoutEngine)](https://www.nuget.org/packages/EsUtil.Algorithm.MultiColumnLayoutEngine/)
-[![Build](https://img.shields.io/github/actions/workflow/status/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/publish.yml)](https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/actions)
 
 ## 概要
 
@@ -11,19 +15,53 @@ Web UI、グリッドレイアウト、カード配置など、複雑なマル�
 
 ---
 
+## 対応環境
+
+- **.NET 10 以上**（ライブラリ本体。C# 14 で実装）
+- OS に依存しないため、Windows / Linux / macOS のいずれでも動作します。
+- テストはライブラリと同じ `net10.0` を対象に実行しています。
+
+---
+
+## インストール
+
+### NuGet.org から
+
+```powershell
+dotnet add package EsUtil.Algorithm.MultiColumnLayoutEngine
+```
+
+- NuGet ギャラリー: <https://www.nuget.org/packages/EsUtil.Algorithm.MultiColumnLayoutEngine>
+- パッケージ名: `EsUtil.Algorithm.MultiColumnLayoutEngine`
+
+### GitHub Packages から
+
+GitHub Packages は認証が必要なため、事前にソースと資格情報を登録します。
+
+```powershell
+# USERNAME は GitHub のユーザー名、TOKEN は read:packages 権限を持つ PAT を指定します
+dotnet nuget add source --username USERNAME --password TOKEN --store-password-in-clear-text --name github "https://nuget.pkg.github.com/tomokuni/index.json"
+
+dotnet add package EsUtil.Algorithm.MultiColumnLayoutEngine
+```
+
+- GitHub Packages: <https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/pkgs/nuget/EsUtil.Algorithm.MultiColumnLayoutEngine>
+
+---
+
 ## 主要機能
 
 ### 3 つのアルゴリズム
 
 | アルゴリズム | 計算量 | 品質 | 特徴 | 推奨用途 |
-|:---|:---|:---|:---|:---|
+| :--- | :--- | :--- | :--- | :--- |
 | DynamicProgramming（DP） | O(n² × m) | 最適解 100% | 最高品質 | 小～中規模（～1000 件）、品質最優先 |
 | Greedy（貪欲法） | O(n × m) | 95%+ | 高速計算 | 大規模（1000+ 件）、速度重視 |
 | BinarySearch | O(n × log(h)) | 99%+ | バランス型 | 全般推奨、品質と速度のバランス最適 |
 
 ### パフォーマンスベンチマーク（リリースビルド .NET 10）
 
-```
+```text
 【アイテム数ごとの計算時間（Solve メソッド実行時）】
 
 アイテム数    DP法(ms)    Greedy法(ms)  BinarySearch(ms)  反復回数  品質G(%)  品質B(%)
@@ -44,42 +82,45 @@ Web UI、グリッドレイアウト、カード配置など、複雑なマル�
 
 ### 品質分析
 
-**DP 法（DynamicProgramming）**
+**DP 法（DynamicProgramming）**:
+
 - 精度：最適解保証（100%）
 - 適用範囲：小～中規模（～1000 件）
 - 限界：1000 件超えで計算時間が急増し非実用的
 - メモリ効率：O(n × m)
 - 推奨シナリオ：品質最優先の小規模データセット（～100 件）
 
-**Greedy 法**
+**Greedy 法**:
+
 - 精度：90%+
 - スケール性：アイテム数が増加するほど品質向上傾向
 - 大規模対応：1,000,000 件でも 6.215 ms で計算完了
 - メモリ効率：O(n)
 - 推奨シナリオ：
-    - 速度重視の大規模データセット（1,000+ 件）
-    - 実用品質（90%+）で十分な用途
+  - 速度重視の大規模データセット（1,000+ 件）
+  - 実用品質（90%+）で十分な用途
 
-**BinarySearch 法**
+**BinarySearch 法**:
+
 - 精度：99%+
 - 安定性：最高（品質の最小保証）
 - 大規模対応：1,000,000 件でも 35.508 ms で計算完了
 - メモリ効率：O(n)
 - 推奨シナリオ：全般推奨、品質と速度のバランス最適
-    - デフォルト選択肢（Solve の method デフォルト値）
-    - 品質 100% が必須な用途
-    - 全スケール対応（10 件～1,000,000 件+）
+  - デフォルト選択肢（Solve の method デフォルト値）
+  - 品質 100% が必須な用途
+  - 全スケール対応（10 件～1,000,000 件+）
 
 ### 選択ガイドライン
+
 | アイテム数 | 推奨アルゴリズム | 理由 |
-|:---|:---|:---|
+| :--- | :--- | :--- |
 | 10～100 件 | DP 法 | 最高品質、計算時間も許容範囲 |
 | 100～500 件 | BinarySearch | DP と同等品質、更に高速 |
 | 500～1,000 件 | BinarySearch | DP が非実用的、BS で 100% 品質 |
 | 1,000～10,000 | BinarySearch | 高速（0.306 ms）、100% 品質 |
 | 10,000～100,000 | BinarySearch | 実用的（2.987 ms）、100% 品質 |
-| 100,000+ | Greedy or BS | BS：35.508 ms, 100% 品質 <br/> Greedy：6.215 ms, 99.9% 品質 <br/> (速度重視なら Greedy 推奨) |
-
+| 100,000+ | Greedy or BS | BS：35.508 ms, 100% 品質 </br> Greedy：6.215 ms, 99.9% 品質 </br> (速度重視なら Greedy 推奨) |
 
 ### 最適化手法
 
@@ -98,7 +139,8 @@ Web UI、グリッドレイアウト、カード配置など、複雑なマル�
 ### 基本的な使用例
 
 ```csharp
-using EsUtil.Algorithm.MultiColumnLayoutEngine;
+using EsUtil.Algorithm;
+using static EsUtil.Algorithm.MultiColumnLayoutEngine;  // Method（入れ子の列挙型）を使用するため
 
 // 1. アイテムリストを作成
 var items = new List<(double Width, double Height)>
@@ -140,6 +182,8 @@ foreach (var (i, (x, y, w, h)) in itemLayouts.Select((item, i) => (i, item)))
 
 ### アルゴリズム選択ガイド
 
+`Solve(widthLimit, method)` は拡張メンバーです（呼び出し後に `CurrentMethod` は元へ戻ります）。
+
 #### BinarySearch 法（推奨）
 
 ```csharp
@@ -174,32 +218,36 @@ var (usedWidth, minHeight) = layout.Solve(200.0, Method.DynamicProgramming);
 public MultiColumnLayoutEngine(
     IReadOnlyList<(double Width, double Height)> items,
     (double Row, double Column) space,
-    int columnLimit = 10,
-    BinarySearchOptions? options = null
+    int columnLimit = 10
 );
 ```
 
-**パラメータ：**
+**パラメータ：**:
+
 - `items`: 各アイテムの (幅, 高さ) リスト（必須、順序維持）
 - `space`: 行間スペース (Row) と列間スペース (Column)（非負値）
 - `columnLimit`: 使用可能な列数の上限（デフォルト: 10、正の値）
-- `options`: アルゴリズム制御オプション（BinarySearch 用、null 許可）
+
+> BinarySearch 用のオプションは、プロパティ `CurrentBinarySearchOptions` で指定します（省略時は `BinarySearchOptions.Default`）。
 
 ### Solve メソッド
 
 ```csharp
-public (double UsedWidth, double MinHeight) Solve(
-    double widthLimit,
-    Method method = Method.BinarySearch
-);
+// インスタンス メソッド（CurrentMethod で指定したアルゴリズムを使用）
+public (double UsedWidth, double MinHeight) Solve(double widthLimit);
+
+// 拡張メンバー（アルゴリズムを引数で指定。CurrentMethod は呼び出し前へ戻る）
+public (double UsedWidth, double MinHeight) Solve(double widthLimit, Method method);
 ```
 
-**戻り値：**
+**戻り値：**:
+
 - `UsedWidth`: 実際に使用した幅（widthLimit 以下）
 - `MinHeight`: 最大列高さ（最小化された値）
 
-**計算式：**
-```
+**計算式：**:
+
+```text
 列の高さ = Σ(アイテム高さ) + (アイテム数 - 1) × space.Row
 列の幅 = max(アイテム幅)
 MinHeight = max(全列の高さ)
@@ -224,11 +272,34 @@ public (double UsedWidth, double MinHeight) SolveSingleColumnLayout();
 // 最大アイテム幅が widthLimit を超えるか判定
 public bool IsValidWidth(double widthLimit);
 
-// 最後の BinarySearch 実行時の反復回数を取得
-public int GetLastBSearchIterationCount();
+// 最後の BinarySearch 実行時の反復回数を取得（未実行・対象外は null）
+public int? GetBinarySearchIterationCount();
 
 // キャッシュをクリア（複数 Solve() 呼び出し時の最適化を無効化）
 public void ClearCache();
+```
+
+### 拡張メンバー（C# 14 の extension ブロック）
+
+`MultiColumnLayoutEngine` 本体の型を変更せずに追加したメンバーです。`using EsUtil.Algorithm;` のみで、インスタンス メンバーと同じ形で呼び出せます。
+
+| 拡張メンバー | 内容 |
+| --- | --- |
+| `(double, double) Solve(double widthLimit, Method method)` | 指定したアルゴリズムで 1 回だけ解く（`CurrentMethod` は呼び出し前へ戻る） |
+| `int ItemCount` | 登録されているアイテム数 |
+| `int ColumnCount` | 最後の `Solve()` で確定した列数（未実行は 0） |
+| `int IterationCount` | 最後の BinarySearch の反復回数（未実行・対象外は 0） |
+
+```csharp
+using EsUtil.Algorithm;
+using static EsUtil.Algorithm.MultiColumnLayoutEngine;  // Method は入れ子の列挙型のため
+
+var engine = new MultiColumnLayoutEngine(items, (1.0, 2.0), 10);
+
+// 一度だけ Greedy で解く（CurrentMethod は呼び出し前の値へ戻る）
+var (usedWidth, minHeight) = engine.Solve(200.0, Method.Greedy);
+
+Console.WriteLine($"アイテム数: {engine.ItemCount} / 列数: {engine.ColumnCount} / 反復: {engine.IterationCount}");
 ```
 
 ---
@@ -245,14 +316,17 @@ var options = new BinarySearchOptions(
 var layout = new MultiColumnLayoutEngine(
     items: items,
     space: (5.0, 10.0),
-    columnLimit: 10,
-    options: options
+    columnLimit: 10
 );
+
+// BinarySearch のオプションはプロパティで設定する（設定すると Strategy が再作成される）
+layout.CurrentBinarySearchOptions = options;
 
 var (usedWidth, minHeight) = layout.Solve(200.0);
 ```
 
-**パラメータ説明：**
+**パラメータ説明：**:
+
 - `Epsilon`：二分探索の収束条件。小さいほど精度向上（但し反復回数増加）
 - `MaxIterations`：無限ループ防止の上限値。通常は 100 回で充分
 - `LowerBoundRatio`：初期下限値の比率。Greedy 結果 × (1 - この値)
@@ -297,7 +371,8 @@ catch (ArgumentException ex)
 }
 ```
 
-**検証項目：**
+**検証項目：**:
+
 - items が null でないか
 - 各アイテムの幅・高さが正の値か（NaN、無限大は無効）
 - space.Row、space.Column が非負か（NaN、無限大は無効）
