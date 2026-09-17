@@ -44,6 +44,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # ビルド・テスト・pack が停止した場合に 6 時間（既定）待たないための上限。
+    # 通常は数分で終わるため、超過は異常とみなして失敗させる
+    timeout-minutes: 30
     steps:
       - name: チェックアウト
         uses: actions/checkout@v5
