@@ -8,6 +8,9 @@
 #   publish … 全パッケージを pack して NuGet.org / GitHub Packages へ公開（実装は publish.yml に集約）
 #   release … バージョンをコミットして push し、タグと GitHub Release を作成する
 #
+# バージョンが未入力の場合は「ドライラン」として、現在のバージョン状況の表示だけを行い、
+# publish と release は実行しない（入力フォームに現在の値を表示できないため、先に確認する手段として使う）。
+#
 # 注意: 外部公開（NuGet.org / GitHub Packages）は、バージョンコミットとタグ作成より前に実行する。
 # NuGet は同じバージョンを再利用できないため、公開に失敗してもタグとバージョンを消費しないようにする。
 # 各公開は --skip-duplicate で冪等にしてあり、同じバージョンで再実行すると未完了分だけが進む。
@@ -18,17 +21,18 @@
 # .NET SDK のバージョンはリポジトリルートの global.json が単一所有する（ワークフローでは指定しない）。
 name: Release
 
-# 実行一覧にバージョンを表示する（既定はコミットメッセージになる）
-run-name: Release ${{ inputs.version }}
+# 実行一覧にバージョンを表示する（未入力のドライランはその旨を表示する）
+run-name: Release ${{ inputs.version || '（現在のバージョンを確認）' }}
 
 on:
   # 手動実行のみ。バージョンは入力で指定する（自動インクリメントは行わない）
   workflow_dispatch:
     inputs:
       version:
-        # 入力フォームには現在の値を表示できない（default に式を指定できない）ため、実行後に Summary へ表示する
-        description: 'リリースするバージョン（例: 1.0.1 / 1.1.0 / 2.0.0 / 1.2.3-rc.1）。現在の状況は実行後の Summary を参照'
-        required: true
+        # 入力フォームには現在の値を表示できない（default に式を指定できない）ため、
+        # 未入力のまま実行すると「現在のバージョン状況の表示」だけを行うドライランになる
+        description: 'リリースするバージョン（例: 1.0.1 / 1.1.0 / 2.0.0 / 1.2.3-rc.1）。未入力のまま実行すると、リリースを行わず現在のバージョン（タグ・公開状況）だけを Summary に表示します'
+        required: false
         type: string
 
 # リリース処理は同時に 1 つだけ実行する
@@ -47,6 +51,8 @@ jobs:
       # Build（ゲート）の実行結果の参照
       actions: read
     outputs:
+      # 'true' の場合はドライラン（バージョン未入力。表示のみでリリースは行わない）
+      dry_run: ${{ steps.mode.outputs.dry_run }}
       version: ${{ steps.verify.outputs.version }}
       tag: ${{ steps.verify.outputs.tag }}
       prerelease: ${{ steps.verify.outputs.prerelease }}
@@ -74,6 +80,27 @@ jobs:
         id: config
         uses: ./.github/actions/read-config
 
+      # バージョンが未入力ならドライラン（現在のバージョン状況の表示だけを行う）
+      - name: 実行モードを判定
+        id: mode
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          # 未入力（空白のみを含む）ならドライラン
+          $dryRun = [string]::IsNullOrWhiteSpace($env:INPUT_VERSION)
+          # 注意: 文字列補間の $() の外に続くメソッド呼び出しは評価されないため、値を変数へ入れてから出力する
+          $dryRunText = if ($dryRun) { 'true' } else { 'false' }
+
+          "dry_run=$dryRunText" >> $env:GITHUB_OUTPUT
+
+          if ($dryRun) {
+            Write-Host 'バージョンが未入力のため、ドライランとして実行します（現在のバージョン状況の表示のみ。リリースは行いません）。'
+          }
+          else {
+            Write-Host "リリースするバージョン: $($env:INPUT_VERSION.Trim())"
+          }
+
       # 現在どこまでリリースされているか（バージョン・タグ・GitHub Release・NuGet.org の公開状況）を
       # 実行サマリーへ表示する。入力フォームには現在の値を表示できないため、ここで確認できるようにする
       - name: 現在のバージョン状況を表示
@@ -86,8 +113,10 @@ jobs:
           BRANCH: ${{ github.ref_name }}
         run: ./.github/scripts/show-current-versions.ps1 -Branch $env:BRANCH
 
+      # ドライランでは検証しない（同じ内容を次回の本実行でも行うため、ここで止める必要がない）
       - name: バージョンとブランチを検証
         id: verify
+        if: steps.mode.outputs.dry_run != 'true'
         shell: pwsh
         env:
           INPUT_VERSION: ${{ inputs.version }}
@@ -116,7 +145,9 @@ jobs:
           "update_version_file=$updateVersionFile" >> $env:GITHUB_OUTPUT
           "mark_latest=$markLatest" >> $env:GITHUB_OUTPUT
 
+      # ドライランではゲートを確認しない（表示だけのため、ここで失敗させない）
       - name: Build ワークフローの成功を確認（ゲート）
+        if: steps.mode.outputs.dry_run != 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -141,11 +172,41 @@ jobs:
 
           Write-Host "ゲートOK: $workflow が成功しています（event: $($hit.event)）"
 
+      # ドライラン（バージョン未入力）の場合は、現在のバージョン状況の表示だけで終了する
+      - name: ドライランの結果をまとめ
+        if: steps.mode.outputs.dry_run == 'true'
+        shell: pwsh
+        env:
+          SUMMARY_BRANCH: ${{ github.ref_name }}
+        run: |
+          # 注意: ダブルクォートの here-string では、バックティックがエスケープ文字になるため使わない。
+          # （`` `$env:X `` は展開されずリテラルになり、`` `v `` は垂直タブになる）
+          # シングルクォートの here-string は展開されないため、値を入れる場合は -f を使う。
+          # 先頭の空行は、直前に表示した「現在のバージョン状況」との区切り（Out-File -Append のため）
+          $message = @'
+
+          ## ドライラン（リリースは行っていません）
+
+          `version` が**未入力**だったため、現在のバージョン状況の表示だけを行いました。
+          検証・pack・公開・タグ作成・Release 作成は実行していません。
+
+          ### 次の操作
+
+          上の「現在のバージョン状況」を確認し、`version` にリリースするバージョンを入力して、
+          もう一度 **Run workflow** を実行してください。
+
+          - 実行ブランチ: `{0}`
+          '@ -f $env:SUMMARY_BRANCH
+
+          $message | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
   # ────────────────────────────────────────────────────────────
   # 2. pack して NuGet.org / GitHub Packages へ公開（実装は publish.yml に集約）
   # ────────────────────────────────────────────────────────────
   publish:
     needs: verify
+    # ドライラン（バージョン未入力）では公開しない
+    if: needs.verify.outputs.dry_run != 'true'
     # 呼び出される publish.yml が必要とする権限をここで付与する（それ以上は与えない）
     permissions:
       contents: read
@@ -163,6 +224,8 @@ jobs:
   # ────────────────────────────────────────────────────────────
   release:
     needs: [verify, publish]
+    # ドライラン（バージョン未入力）ではコミット・タグ・Release を作成しない
+    if: needs.verify.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
     permissions:
       # ブランチ push、タグ作成、Release 作成
@@ -294,14 +357,18 @@ jobs:
           # バックポートかどうかを表示用の文言にする
           $kind = if ($env:SUMMARY_KIND -eq 'true') { 'バックポート（バージョンファイルは変更しません）' } else { '通常のリリース' }
 
-          @"
+          # 注意: ダブルクォートの here-string では、バックティックがエスケープ文字になり、
+          # `` `$env:X `` が展開されずリテラル（$env:X）になる。シングルクォート + -f で埋め込む。
+          $message = @'
           ## リリース結果
 
           | 項目 | 値 |
           | --- | --- |
-          | バージョン | `$env:SUMMARY_VERSION` |
-          | タグ | `$env:SUMMARY_TAG` |
-          | 対象コミット | `$env:SUMMARY_SHA` |
-          | プレリリース | $env:SUMMARY_PRERELEASE |
-          | 種別 | $kind |
-          "@ >> $env:GITHUB_STEP_SUMMARY
+          | バージョン | `{0}` |
+          | タグ | `{1}` |
+          | 対象コミット | `{2}` |
+          | プレリリース | {3} |
+          | 種別 | {4} |
+          '@ -f $env:SUMMARY_VERSION, $env:SUMMARY_TAG, $env:SUMMARY_SHA, $env:SUMMARY_PRERELEASE, $kind
+
+          $message | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

@@ -111,7 +111,7 @@
 | --- | --- | --- |
 | [`workflows/build.yml`](workflows/build.yml) | `main` への push、`main` 向け PR（**必ず実行**）、`release/**` への push、手動実行（dev など任意のブランチ） | ビルド・テスト・pack の検証・nupkg の保管（**公開は行わない**） |
 | [`workflows/publish.yml`](workflows/publish.yml) | `workflow_call` | pack と公開の単一実装（`version` を受け取るとそのバージョンで pack する） |
-| [`workflows/release.yml`](workflows/release.yml) | **手動実行のみ。実行ブランチは `releaseBranches` に従う** | 検証 → pack と公開 → バージョンコミット → タグ + GitHub Release 作成 |
+| [`workflows/release.yml`](workflows/release.yml) | **手動実行のみ。実行ブランチは `releaseBranches` に従う**（`version` 未入力ならドライラン） | 検証 → pack と公開 → バージョンコミット → タグ + GitHub Release 作成 |
 
 `build.yml` の成功実行はリリースの**前提（ゲート）**です。`release.yml` は、リリース対象コミット（`main`）に対する `build.yml` の成功実行が存在することを確認してから Release を作成します。
 
@@ -128,8 +128,10 @@ flowchart TD
         F --> G --> H --> I
     end
 
-    D -->|"Actions → Release → Run workflow<br/>（main を選択し version を入力）"| F
+    D -->|"Actions → Release → Run workflow<br/>（main を選択。version を空欄で実行）"| D1["verify<br/>現在のバージョン状況を<br/>実行サマリーへ表示（ドライラン）"]
+    D1 -->|"確認後の version を入力して再度実行"| F
     G -->|失敗| J["中断<br/>バージョンコミットとタグは作られない"]
+    style D1 fill:#fff3cd
     style I fill:#d4edda
 ```
 
@@ -141,8 +143,11 @@ flowchart TD
 
 1. `dev` の変更を `main` へマージ（push）する
 2. `Actions` → **Build** が成功するまで待つ（`dev` への push では Build は実行されません）
-3. `Actions` → **Release** → `Run workflow` を開く
-4. **実行ブランチに `main` を選び**（`releaseBranches` に含まれないブランチでは検証で失敗します）、`version` にリリースするバージョンを入力して実行する
+3. **現在のバージョンを確認する**（まだ `version` を入力しない）
+   - `Actions` → **Release** → `Run workflow` を開き、**実行ブランチに `main` を選び、`version` を空欄のまま実行**する
+   - リリースは行われず、**実行サマリーに現在のバージョン（`<Version>`・タグ・GitHub Release・NuGet.org の公開状況）が表示されます**
+   - リリース前の事前確認であるため、実行ブランチの検証やゲートの確認も行いません（失敗しません）
+4. サマリーの「`version` に入力する値」を確認し、`version` にリリースするバージョンを入力して、もう一度 **Run workflow** を実行する
 5. ログの「結果をまとめ」でバージョン・タグ・対象コミットを確認する
 6. NuGet.org と GitHub Packages に反映されていることを確認する
    - <https://www.nuget.org/packages/EsUtil.Algorithm.MultiColumnLayoutEngine>
@@ -154,11 +159,14 @@ flowchart TD
   `verify` ジョブが最初に実行ブランチを検証し、含まれない場合は失敗します。
   `release/` 配下のブランチは **`release/<major>.<minor>`**（例: `release/1.0`）にしてください。
   系列ブランチからのリリース方法は[バックポート](#バックポート旧系列へのリリース)を参照してください。
+- **`version` が未入力の場合はドライランになります。** 現在のバージョン状況の表示だけを行い、
+  検証・pack・公開・タグ作成・Release 作成は実行しません（成功として終了します）。
+  実行名は `Release （現在のバージョンを確認）` になります。
 - **入力フォームには現在のバージョンを表示できません。** `workflow_dispatch` の入力の `default` には式を
   指定できないため（GitHub Actions の仕様）、静的な文字列しか設定できません。
-  代わりに、実行すると **`verify` ジョブの先頭で現在のバージョン状況が実行サマリーに表示されます**。
-  `version` を入力する前に確認したい場合は、リポジトリの **Actions → Release → Run workflow** を一度開き、
-  別途 `Actions` → 直近の Release 実行の Summary を参照してください。
+  入力フォームの説明文にも「未入力のまま実行すると現在のバージョンだけを Summary に表示する」旨を記載しています。
+  なお、**前回の Release 実行のサマリーはリリース前の状態**なので、リリース直後は「今出したバージョン」が
+  載っていません。最新の状態はドライランで確認してください。
 - 実行サマリーに表示される項目は、実行ブランチ、**リリース可能なブランチ**、`Directory.Build.props` の `<Version>`、
   タグの最大、**系列（`major.minor`）ごとのタグの最大**（系列が 2 つ以上ある場合）、GitHub Release、
   パッケージごとの NuGet.org の公開済みバージョン（最新と全件）です。
@@ -175,7 +183,7 @@ flowchart TD
 - サマリーを表示するステップが失敗しても、リリースは中止されません（情報の表示のみで、状態を変更しません）。
   NuGet.org や GitHub への問い合わせに失敗した項目は「未公開」「なし」として表示されます。
 - 実行一覧（`Actions` → **Release**）では、実行名が **`Release <入力したバージョン>`** になります
-  （どのバージョンを出した実行かを一覧で判別できます）。
+  （どのバージョンを出した実行かを一覧で判別できます。ドライランは `Release （現在のバージョンを確認）`）。
 
 ## 公開先とその設定
 
