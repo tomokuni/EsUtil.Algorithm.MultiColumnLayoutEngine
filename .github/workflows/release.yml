@@ -60,14 +60,14 @@ jobs:
       release_notes: ${{ steps.config.outputs.release_notes }}
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # タグの列挙のため全履歴を取得する
           fetch-depth: 0
 
       # 「現在のバージョン状況」の表示で dotnet msbuild（PackageId の取得）を使うため、先に SDK を入れる
       - name: .NET SDK をセットアップ
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
 
       # リリース設定（バージョンファイル・表示名・説明・ブランチ・ゲート）は release-config.json が単一所有する
       - name: リリース設定を読む
@@ -171,14 +171,14 @@ jobs:
       actions: write
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # バージョンコミットの push のため全履歴を取得する
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 成果物をダウンロード
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: assets
           # 各パッケージの成果物を 1 つのフォルダへ集約する（ファイル名は配布名のまま）
