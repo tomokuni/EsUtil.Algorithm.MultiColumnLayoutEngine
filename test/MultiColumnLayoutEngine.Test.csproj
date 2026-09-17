@@ -28,6 +28,8 @@
     <PublishAot>False</PublishAot>
     <GenerateDocumentationFile>False</GenerateDocumentationFile>
     <IsPublishable>False</IsPublishable>
+    <!-- テストプロジェクトは配布しない（ソリューション単位の dotnet pack でも nupkg を作らない） -->
+    <IsPackable>False</IsPackable>
   </PropertyGroup>
 
   <!-- テスト対象プロジェクトに依存 -->

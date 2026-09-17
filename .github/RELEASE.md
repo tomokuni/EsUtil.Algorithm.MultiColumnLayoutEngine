@@ -12,26 +12,38 @@
 
 | ファイル | 内容 |
 | --- | --- |
-| [`release-config.json`](release-config.json) | プロダクト名、バージョンファイル、ゲートのワークフロー、パッケージの定義、NuGet.org の接続先 |
+| [`release-config.json`](release-config.json) | プロダクト名、バージョンファイル、ゲートのワークフロー、**リリースを許可するブランチ**、パッケージの定義、NuGet.org の接続先 |
+| [`actions/read-config`](actions/read-config/action.yml) | `release-config.json` を読んで各ワークフローへ渡す共通アクション（読み取りの実装はここだけ） |
 | [`../Directory.Build.props`](../Directory.Build.props) | リリースバージョン（`<Version>`）。各 `.csproj` では指定しない |
+| [`../global.json`](../global.json) | .NET SDK のバージョン。ワークフローでは指定しない |
 | [`workflows/publish.yml`](workflows/publish.yml) | pack と公開（NuGet.org / GitHub Packages）の実装（`release.yml` が呼ぶ） |
-| [`scripts/version.ps1`](scripts/version.ps1) | バージョンの規則（形式・比較・系列・プレリリース判定） |
+| [`scripts/version.ps1`](scripts/version.ps1) | バージョンの規則（形式・比較・系列・プレリリース判定・タグの列挙） |
 
 パッケージの追加・変更は **`release-config.json` の `packages[]` を編集します**（ワークフローとスクリプトの変更は不要です）。
+**リリースを許可するブランチは `releaseBranches` が持ちます**（本リポジトリは `["main", "release/**"]`。
+`release/` 配下は **`release/<major>.<minor>` の形式**に限定され、入力バージョンの系列と一致させる必要があります）。
 
 ```text
 <リポジトリルート>/
 ├── Directory.Build.props     # リリースバージョン（各 .csproj では指定しない）
+├── global.json               # .NET SDK のバージョン（ワークフローでは指定しない）
 └── .github/
     ├── release-config.json        # リリース設定（リポジトリ固有の設定はこのファイルのみ）
+    ├── actions/
+    │   └── read-config/
+    │       └── action.yml         # release-config.json を読む共通アクション
+    ├── dependabot.yml             # GitHub Actions / NuGet の更新 PR
     ├── RELEASE.md                 # 本ドキュメント
     ├── REUSING.md                 # 他のリポジトリへの流用方法
+    ├── rulesets/
+    │   └── tag-version.json       # Tag ruleset の定義（Settings へインポートする）
     ├── scripts/
     │   ├── version.ps1            # バージョンの規則
     │   ├── set-version.ps1        # バージョンファイルの書き換え（冪等）
-    │   └── verify-release-version.ps1  # リリース可否の検証
+    │   ├── verify-release-version.ps1  # リリース可否の検証
+    │   └── show-current-versions.ps1   # 現在のバージョン状況の表示
     └── workflows/
-        ├── build.yml              # push / PR でビルド・テスト（公開しない）
+        ├── build.yml              # push / PR でビルド・テスト・pack（公開しない）
         ├── publish.yml            # pack と公開（release.yml から呼ばれる）
         └── release.yml            # 手動実行で検証・公開・タグ・Release 作成
 ```
@@ -40,27 +52,76 @@
 
 - リリースバージョンは `Directory.Build.props` の `<Version>` に記載し、**各 `.csproj` には記載しないでください**。
   リリース時に `release.yml` がこの 1 行を入力値へ書き換えてコミットします。
-- 同じ設定を複数箇所に置かないでください（例: パッケージの定義をワークフローへ直接書く、バージョンを `.csproj` にも書く）。
+- **.NET SDK のバージョンは `global.json` に記載し、ワークフローには記載しないでください**
+  （`actions/setup-dotnet` が `global.json` を読むため、`dotnet-version` の指定は不要です）。
+- 同じ設定を複数箇所に置かないでください（例: パッケージの定義をワークフローへ直接書く、バージョンを `.csproj` にも書く、SDK のバージョンをワークフローにも書く）。
   変更時の注意事項は [`REUSING.md`](REUSING.md) にも記載しています。
+
+## 依存関係の更新（Dependabot）
+
+[`dependabot.yml`](dependabot.yml) が、GitHub Actions と NuGet パッケージの更新 Pull Request を作成します。
+
+| 対象 | 間隔 | まとめ方 |
+| --- | --- | --- |
+| GitHub Actions（`uses:` で参照しているアクション） | 毎週月曜 09:00（Asia/Tokyo） | すべてを 1 つの Pull Request にまとめる |
+| NuGet（`/src` と `/test` の `.csproj`） | 毎月 | minor / patch を 1 つの Pull Request にまとめる |
+
+**注意事項**:
+
+- Dependabot の Pull Request は**読み取り専用トークン・シークレット無し**で実行されます。`build.yml` はシークレットを使わないため、CI はそのまま動作します。
+- **NuGet のメジャー更新（例: xunit 3 系）は作成されません**（テストの書き方が変わるため、手動で判断します）。
+- Pull Request の内容を確認して `main` へマージします（マージ方式は Squash merge を推奨）。マージ後の `main` への push で `build.yml`（ゲート）が実行されます。
+- 破壊的な変更（`actions/upload-artifact` のメジャー更新など）は、CI が失敗した内容を確認して修正します。
+
+## リポジトリの設定（初回のみ）
+
+次はワークフローでは設定できません。リポジトリの **Settings** で有効化します。
+
+### タグの保護（Tag ruleset）
+
+タグ（`v*`）の作成・更新・削除をワークフロー経由に限定します。定義は
+[`rulesets/tag-version.json`](rulesets/tag-version.json) にあります。
+
+| 項目 | 値 |
+| --- | --- |
+| Ruleset name | `Protect version tags` |
+| Target | **Tags** |
+| Enforcement status | **Active** |
+| Target tags | `v*`（内部的には `refs/tags/v*`） |
+| Tag protections | **Restrict creations** / **Restrict updates** / **Restrict deletions** / **Block force pushes** |
+| Bypass list | **GitHub Actions**（アプリ。ID `15368`） |
+
+**設定手順**:
+
+1. **Settings → Rules → Rulesets** を開く
+2. **New ruleset** のドロップダウンから **Import a ruleset** を選び、`rulesets/tag-version.json` を指定する
+   - インポートできない場合は **New tag ruleset** で上表のとおり手動設定する
+3. 内容を確認して **Create** を押下する
+
+**注意事項**:
+
+- `release.yml` は `GITHUB_TOKEN`（= GitHub Actions アプリ）でタグを作成するため、**bypass に GitHub Actions を追加しないとリリースが失敗します**。
+- 導入後は、**Actions → Release** を 1 度実行してタグ作成が通ることを確認してください。
+- ローカルからの `git push origin v1.0.1` や `git push --tags` は拒否されます（タグは Release 実行時に作成します）。
+- 定義を変更した場合は、**同じ JSON の値と実際の ruleset を一致**させてください（ruleset はコードから自動適用されないため、変更時は手動で更新します）。
 
 ## ワークフロー
 
 | ワークフロー | 実行契機 | 内容 |
 | --- | --- | --- |
-| [`workflows/build.yml`](workflows/build.yml) | `main` / `dev` / `release/**` への push、`main` 向け PR、手動 | ビルド・テスト・nupkg の保管（**公開は行わない**） |
+| [`workflows/build.yml`](workflows/build.yml) | `main` への push、`main` 向け PR（**必ず実行**）、`release/**` への push、手動実行（dev など任意のブランチ） | ビルド・テスト・pack の検証・nupkg の保管（**公開は行わない**） |
 | [`workflows/publish.yml`](workflows/publish.yml) | `workflow_call` | pack と公開の単一実装（`version` を受け取るとそのバージョンで pack する） |
-| [`workflows/release.yml`](workflows/release.yml) | **手動実行のみ** | 検証 → pack と公開 → バージョンコミット → タグ + GitHub Release 作成 |
+| [`workflows/release.yml`](workflows/release.yml) | **手動実行のみ。実行ブランチは `releaseBranches` に従う** | 検証 → pack と公開 → バージョンコミット → タグ + GitHub Release 作成 |
 
-`build.yml` の成功実行はリリースの**前提（ゲート）**です。`release.yml` は、リリース対象コミットに対する `build.yml` の成功実行が存在することを確認してから Release を作成します。
+`build.yml` の成功実行はリリースの**前提（ゲート）**です。`release.yml` は、リリース対象コミット（`main`）に対する `build.yml` の成功実行が存在することを確認してから Release を作成します。
 
 ```mermaid
 flowchart TD
-    A["dev へ push"] --> B["build.yml<br/>ビルド + テスト + nupkg 保管"]
-    C["main へ push（マージ含む）"] --> B
+    A["main へ push（マージ含む）"] --> B["build.yml（必ず実行）<br/>ビルド + テスト + nupkg 保管"]
     B --> D{"リリースする?"}
 
-    subgraph rel ["release.yml（手動実行のみ）"]
-        F["verify<br/>ブランチ / ゲート / バージョン / タグ未作成"]
+    subgraph rel ["release.yml（手動実行のみ / 実行できるブランチは releaseBranches）"]
+        F["verify<br/>ブランチ（main）/ ゲート / バージョン / タグ未作成"]
         G["publish<br/>publish.yml を呼ぶ<br/>pack → NuGet.org → GitHub Packages"]
         H["release<br/>バージョンをコミット → push → タグ + Release 作成"]
         I["バージョンコミットの検証を起動"]
@@ -79,13 +140,42 @@ flowchart TD
 **公開するパッケージ ID（`EsUtil.Algorithm.MultiColumnLayoutEngine`）を明示**して登録します。
 
 1. `dev` の変更を `main` へマージ（push）する
-2. `Actions` → **Build** が成功するまで待つ
+2. `Actions` → **Build** が成功するまで待つ（`dev` への push では Build は実行されません）
 3. `Actions` → **Release** → `Run workflow` を開く
-4. **実行ブランチに `main` を選び**、`version` にリリースするバージョンを入力して実行する
+4. **実行ブランチに `main` を選び**（`releaseBranches` に含まれないブランチでは検証で失敗します）、`version` にリリースするバージョンを入力して実行する
 5. ログの「結果をまとめ」でバージョン・タグ・対象コミットを確認する
 6. NuGet.org と GitHub Packages に反映されていることを確認する
    - <https://www.nuget.org/packages/EsUtil.Algorithm.MultiColumnLayoutEngine>
    - <https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/pkgs/nuget/EsUtil.Algorithm.MultiColumnLayoutEngine>
+
+**注意事項**:
+
+- **リリースできるブランチは `release-config.json` の `releaseBranches` が決めます**（本リポジトリは `["main", "release/**"]`）。
+  `verify` ジョブが最初に実行ブランチを検証し、含まれない場合は失敗します。
+  `release/` 配下のブランチは **`release/<major>.<minor>`**（例: `release/1.0`）にしてください。
+  系列ブランチからのリリース方法は[バックポート](#バックポート旧系列へのリリース)を参照してください。
+- **入力フォームには現在のバージョンを表示できません。** `workflow_dispatch` の入力の `default` には式を
+  指定できないため（GitHub Actions の仕様）、静的な文字列しか設定できません。
+  代わりに、実行すると **`verify` ジョブの先頭で現在のバージョン状況が実行サマリーに表示されます**。
+  `version` を入力する前に確認したい場合は、リポジトリの **Actions → Release → Run workflow** を一度開き、
+  別途 `Actions` → 直近の Release 実行の Summary を参照してください。
+- 実行サマリーに表示される項目は、実行ブランチ、**リリース可能なブランチ**、`Directory.Build.props` の `<Version>`、
+  タグの最大、**系列（`major.minor`）ごとのタグの最大**（系列が 2 つ以上ある場合）、GitHub Release、
+  パッケージごとの NuGet.org の公開済みバージョン（最新と全件）です。
+- **`version` には、比較対象より大きいバージョンを入力します。** 比較対象は同じ系列のタグの最大です
+  （サマリーの「`version` に入力する値」を参照）。
+  - **通常のリリース**: 例では「全タグの最大」が目安になります（新しい系列を出す場合を除き、同じ系列の最大と一致します）
+  - **バックポート（旧系列へのリリース）**: 対象系列のタグの最大と比較されるため、全タグの最大より小さくても入力できます
+    （例: `v2.0.0` がある状態で `1.0.2` をリリース）
+- **バックポートでは `Directory.Build.props` のバージョンを書き換えません**（main のバージョンを旧系列へ
+  戻さないため）。公開物（nupkg）には入力したバージョンが適用され、タグと GitHub Release は通常どおり作成されます。
+- 同じ系列の中で既存以下のバージョンは検証で失敗します（同値の再リリースも不可）。
+- サマリーの値はリリース前の状態です。通常のリリースでは、リリース後に `version` と
+  `Directory.Build.props` の `<Version>` が入力値へ更新されます。
+- サマリーを表示するステップが失敗しても、リリースは中止されません（情報の表示のみで、状態を変更しません）。
+  NuGet.org や GitHub への問い合わせに失敗した項目は「未公開」「なし」として表示されます。
+- 実行一覧（`Actions` → **Release**）では、実行名が **`Release <入力したバージョン>`** になります
+  （どのバージョンを出した実行かを一覧で判別できます）。
 
 ## 公開先とその設定
 
@@ -97,7 +187,7 @@ flowchart TD
 **長期 API キーや GitHub Secrets の登録は不要です。**
 
 NuGet.org のポリシーは、**このリポジトリのパッケージ ID（`EsUtil.Algorithm.MultiColumnLayoutEngine`）を明示**して登録します。
-ポリシーは **リポジトリ単位・ワークフロー ファイル単位**なので、リポジトリやワークフローを増やす場合はポリシーも増やします。
+ポリシーは **リポジトリ単位・ワークフローファイル単位**なので、リポジトリやワークフローを増やす場合はポリシーも増やします。
 
 ### NuGet.org の Trusted Publishing ポリシーの登録手順
 
@@ -146,7 +236,7 @@ sequenceDiagram
   （`Claim 'job_workflow_ref' has value '...' which does not start with ...`）。
 - **別リポジトリで公開する場合は、そのリポジトリ用のポリシーを追加してください**
   （[別リポジトリのパッケージを公開する場合](#別リポジトリのパッケージを公開する場合)）。
-  全リポジトリでワークフロー ファイル名を `publish.yml` に統一しておくと、追加時の差分が小さくなります。
+  全リポジトリでワークフローファイル名を `publish.yml` に統一しておくと、追加時の差分が小さくなります。
 
 #### 前提
 
@@ -202,7 +292,7 @@ Workflow File → Environment → Select Scopes → Glob Patterns and Packages**
 
 1. `Actions` → **Release** を手動実行する（手順は「[リリース手順](#リリース手順)」を参照）
 2. `publish` ジョブの **「NuGet.org にログイン（OIDC -> 一時 API キー）」** が成功することを確認する
-3. **「NuGet.org へ公開」** が成功し、パッケージ ページで新しいバージョンを確認する
+3. **「NuGet.org へ公開」** が成功し、パッケージページで新しいバージョンを確認する
    - <https://www.nuget.org/packages/EsUtil.Algorithm.MultiColumnLayoutEngine>
 
 #### うまくいかない場合
@@ -229,11 +319,11 @@ Workflow File → Environment → Select Scopes → Glob Patterns and Packages**
   恒久的に有効になります。7 日を過ぎて未公開の場合は Inactive になるため、UI の **Activate** から期間を再開してください。
 - 組織所有のポリシーを作成したユーザーが組織から外れた場合や、組織がロック・削除された場合は Inactive になります
   （再びメンバーになれば自動で Active に戻ります）。
-- リポジトリの改名・移譲、ワークフロー ファイル名の変更を行った場合は、ポリシーを更新（または再登録）してください。
+- リポジトリの改名・移譲、ワークフローファイル名の変更を行った場合は、ポリシーを更新（または再登録）してください。
 
 #### 別リポジトリのパッケージを公開する場合
 
-ポリシーは**リポジトリ単位**（かつ**ワークフロー ファイル単位**）で登録するため、別のリポジトリで公開する場合は
+ポリシーは**リポジトリ単位**（かつ**ワークフローファイル単位**）で登録するため、別のリポジトリで公開する場合は
 **そのリポジトリ用のポリシーを追加**します。ワークフローとスクリプトはリポジトリ固有の記述がないため、
 コピーして使用できます。
 
@@ -273,7 +363,7 @@ nuget.org のポリシー（リポジトリごとに 1 つ）
 - **同じリポジトリで公開するワークフローを増やす場合もポリシーを追加してください。**
   本リポジトリは `release.yml` → `publish.yml` の 1 経路に集約しているため、ポリシーは 1 つで足ります
   （`publish.yml` 以外から `dotnet nuget push` する経路を増やさないでください）。
-- ポリシー登録後のランニング コストはありません（Secrets の登録・ローテーションは不要です）。
+- ポリシー登録後のランニングコストはありません（Secrets の登録・ローテーションは不要です）。
 
 **リポジトリごとの登録を避ける場合の代替案**:
 
@@ -320,37 +410,76 @@ semver 形式で入力します。数値部分の**先頭 0 は使用できま�
 
 | # | 条件 | 失敗する例 |
 | --- | --- | --- |
-| 1 | 実行ブランチが `main` または `release/<major>.<minor>` | `dev` を選んで実行 |
+| 1 | 実行ブランチが `releaseBranches`（`main` / `release/**`）に含まれる | `dev` を選んで実行 |
 | 2 | 対象コミットに対する `build.yml` の**成功実行がある** | push 直後（Build 実行中・失敗）に実行 |
 | 3 | バージョンが semver 形式（先頭 0 不可） | `1.2`、`01.2.3` |
-| 4 | `main`: **全タグの最大より大きい** | `v2.0.0` があるのに `1.3.0` を入力 |
-| 5 | `release/X.Y`: 入力の系列が `X.Y` に一致し、**`vX.Y.*` の最大より大きい** | `release/1.2` に `1.3.0` を入力 |
-| 6 | タグ `v<version>` が**未作成** | 既存と同じバージョンを入力 |
+| 4 | **同じ系列（`major.minor`）のタグの最大より大きい** | 系列 1.0 の最大が `v1.0.1` なのに `1.0.1` を入力 |
+| 5 | タグ `v<version>` が**未作成** | 既存と同じバージョンを入力 |
+| 6 | `release/` 配下の場合、ブランチ名が `release/<major>.<minor>` で、入力の系列が一致する | `release/1.0` に `2.0.1` を入力 |
 
-条件 4・5 により、**同値の入力も失敗**します（同じバージョンの再リリースはできません）。
+条件 4 は**系列内でのみ比較**します。したがって、`v2.0.0` が存在していても系列 1.0 の `1.0.2` は
+入力できます（バックポート）。同値の入力は失敗します（同じバージョンの再リリースはできません）。
 
-## バックポートリリース
+## バックポート（旧系列へのリリース）
 
-古い系列の保守リリースは、`release/<major>.<minor>` ブランチから実行します。
+タグの比較を**系列（`major.minor`）内に限定**しているため、旧系列のバージョンもリリースできます。
+実行方法は「どのコードを出荷するか」で 2 通りに分かれます。
 
-```text
-例: v2.0.0 をリリース済みで、1.0 系に修正を出したい場合
+事前に、現在の系列ごとの状態を確認します（系列ごとのタグの最大が表示されます）。
 
-1. release/1.0 ブランチを作成し、修正を cherry-pick する
-2. release/1.0 へ push する（Build が成功するまで待つ）
-3. Actions → Release → Run workflow で
-   実行ブランチに release/1.0 を選び、version に 1.0.1 を入力する
+```powershell
+& ./.github/scripts/show-current-versions.ps1 -Branch main
 ```
 
-| 実行ブランチ | 比較対象 | 例（タグ: v1.0.1 / v2.0.0） |
-| --- | --- | --- |
-| `main` | **全タグ**の最大 | `2.0.1` は OK / `1.1.0` は失敗（誤った系列への逆戻りを防ぐ） |
-| `release/1.0` | `v1.0.*` の最大 | `1.0.2` は **OK（バックポート）** / `1.0.1` は失敗（同値） |
+### A. 修正が main に取り込まれている場合（main の内容を出荷してよい）
 
-バックポートでは次を自動で行います。
+```text
+例: v1.0.1 と v2.0.0 をリリース済み。1.0 系に修正を出したい。
 
-- `--latest=false`（古い系列を Latest にしない）
-- `--notes-start-tag v1.0.1`（リリースノートの範囲を系列内に限定）
+1. 修正を main へ取り込む（マージして push する）。main のバージョンは 2.x のままでよい
+2. Actions → Build が成功するまで待つ
+3. Actions → Release → Run workflow を開く
+4. 実行ブランチに main を選び、version に 1.0.2（系列 1.0 の次のバージョン）を入力して実行する
+5. 「結果をまとめ」で「種別: バックポート」になっていることを確認する
+```
+
+- 公開物は main の内容から作られます。**main に旧系列と互換性のない変更が入っている場合はこの方法を使えません**（B を参照）。
+- `Directory.Build.props` のバージョンは書き換えられないため、main のバージョンは `2.0.0` のまま維持されます。
+
+### B. 旧系列のコードで出荷する必要がある場合（系列ブランチを使う）
+
+系列ブランチ（`release/X.Y`）からのリリースは**設定済み**です（`release-config.json` の
+`releaseBranches` に `"release/**"` を含めてあります）。系列ブランチを作って push するだけで実行できます。
+
+```text
+例: 1.0 系のコードで 1.0.2 を出す。
+
+1. release/1.0 ブランチを（初回のみ）作成し、修正を cherry-pick する
+   → .github と Directory.Build.props も含める（ブランチ自身のバージョンを 1.0.x にしておく）
+2. release/1.0 へ push し、Actions → Build が成功するまで待つ
+3. Actions → Release → Run workflow で、実行ブランチに release/1.0、version に 1.0.2 を入力して実行する
+4. release/1.0 の Directory.Build.props が 1.0.2 に更新されてコミットされる（系列ブランチは自身のバージョンを持つ）
+```
+
+- ブランチ名は **`release/<major>.<minor>` の形式**にしてください（`release/experiment` のような名前は検証で失敗します）。
+- 入力バージョンの系列がブランチ名（`1.0`）と一致している必要があります（`release/1.0` に `2.0.1` は指定できません）。
+- バージョン比較は系列内で行われます（系列ブランチでも `v2.0.0` は影響しません）。
+
+### バックポート時に自動で行われること
+
+| 処理 | 内容 |
+| --- | --- |
+| バージョンファイル | main からのバックポートは**書き換えない**（main のバージョンを旧系列へ戻さない）。系列ブランチからは書き換える（そのブランチのバージョンになる） |
+| 公開物のバージョン | 入力したバージョン（例: `1.0.2`）で pack する |
+| リリースノート | `--notes-start-tag` に**同じ系列の前回タグ**（例: `v1.0.1`）を指定する |
+| GitHub Release の Latest | `--latest=false` を指定する（旧系列が Latest にならないようにする） |
+
+**注意事項**:
+
+- 同じ系列のタグの最大より大きいバージョンを指定してください（例: 系列 1.0 の最大が `v1.0.1` なら `1.0.2` 以上）。
+- **NuGet は同じバージョンを再利用できません。** 指定したバージョンが既に公開済みの場合は失敗します。
+- バックポート後も main のバージョンは変わらないため、次の通常リリースは main のバージョン（例: `2.0.0`）より
+  大きいバージョン（例: `2.0.1`）を指定します。
 
 ## Release の添付ファイル
 
@@ -366,9 +495,11 @@ semver 形式で入力します。数値部分の**先頭 0 は使用できま�
 | `publish`（pack 前） | 何も変更されていない | **同じバージョンで再実行**する |
 | `publish`（公開の途中） | NuGet.org に公開済みの可能性あり | **同じバージョンで再実行**する（`--skip-duplicate` により公開済みはスキップされ、未完了分だけが進む） |
 | `release`（push 後） | ブランチは push 済み・タグ未作成 | **同じバージョンで再実行**する（バージョン設定が冪等なため再試行できる） |
+| `release`（Release 作成の途中） | draft のリリースが残っている可能性あり | **draft を削除してから同じバージョンで再実行**する（残っていると `gh release create` が既存のリリースと衝突して失敗する） |
 
 - 失敗した実行を「Re-run」しても**その実行時のワークフロー定義**が使われるため、定義を修正した場合は再実行せず、新しく `Run workflow` してください。
 - `release` ジョブがバージョンをコミットした後に失敗した場合、ブランチの先頭コミットが変わるため**ゲート（条件 2）が未充足**になります。`Actions` → **Build** の成功を待ってから再実行してください。
+- 残った draft は **Releases のページ**から削除できます（draft のうちはタグは作成されていないため、同じバージョンで再実行できます）。
 
 ### `publish / pack` が `NU5026` で失敗する場合
 
@@ -400,21 +531,27 @@ error NU5026: パックされるファイル '.../src/bin/Release/net10.0/EsUtil
 # バージョンを設定する（バージョンファイルを更新。冪等。既定は Directory.Build.props）
 & ./.github/scripts/set-version.ps1 -Version 1.0.1
 
-# リリース可否を事前確認する（形式・系列・単調性・タグ未作成）
+# リリース可否を事前確認する（形式・ブランチ・単調性（同じ系列）・タグ未作成）
 $info = & ./.github/scripts/verify-release-version.ps1 -Version 1.0.1 -Branch main | ConvertFrom-Json
 $info.tag           # -> v1.0.1
-$info.notesStartTag # -> v1.0.0
+$info.notesStartTag # -> v1.0.0（同じ系列の前回タグ）
 $info.prerelease    # -> False
+$info.isBackport    # -> False（全タグの最大以下の場合は True）
 
-# パイプラインの確認（CI と同一のコマンド）
+# 現在のバージョン状況を確認する（読み取りのみ。リリースするバージョンの判断に使う）
+& ./.github/scripts/show-current-versions.ps1 -Branch main
+& ./.github/scripts/show-current-versions.ps1 -NoNetwork            # NuGet.org と GitHub へ問い合わせない場合
+
+# パイプラインの確認（build.yml と同一のコマンドと順序）
 dotnet restore MultiColumnLayoutEngine.slnx
 dotnet build MultiColumnLayoutEngine.slnx -c Release --no-restore
 dotnet test MultiColumnLayoutEngine.slnx -c Release --no-build
+dotnet pack MultiColumnLayoutEngine.slnx -c Release --no-build -o ./artifacts
+Get-ChildItem ./artifacts   # -> EsUtil.Algorithm.MultiColumnLayoutEngine.<version>.nupkg
 
-# 公開物の確認（publish.yml と同一の順序。build してから pack する）
+# 公開するパッケージだけを確認する場合（publish.yml と同一のコマンド。プロジェクトは設定から読む）
 dotnet build src/MultiColumnLayoutEngine.csproj -c Release
 dotnet pack src/MultiColumnLayoutEngine.csproj -c Release --no-build -o ./artifacts
-Get-ChildItem ./artifacts   # -> EsUtil.Algorithm.MultiColumnLayoutEngine.<version>.nupkg
 ```
 
 バージョンの規則（形式・比較）だけを確認する場合は、ライブラリを直接使えます。
@@ -424,6 +561,7 @@ Get-ChildItem ./artifacts   # -> EsUtil.Algorithm.MultiColumnLayoutEngine.<versi
 ConvertTo-SemanticVersion -Version '1.2.3-rc.1'   # 不正なら例外
 Get-VersionSeries -Version '1.2.3'                # -> 1.2
 Get-MaxVersion -Versions @('1.0.0', '1.2.0')      # -> 1.2.0
+Get-ReleasedVersions -RepoRoot (Get-Location)     # -> リリース済みのタグ（v を除く）
 ```
 
 ## README のバッジについて
@@ -445,11 +583,14 @@ shields.io の `dynamic/json` も認証情報を持てないため値を取得�
 - NuGet.org への公開は **Trusted Publishing（OIDC）** で行うため、NuGet の API キー（Secrets）の登録・
   ローテーションは不要です。初回のみ、nuget.org でのポリシー登録（**パッケージ ID を明示**）が必要です
   （[登録手順](#nugetorg-の-trusted-publishing-ポリシーの登録手順)）。
-  ポリシーはリポジトリ単位・ワークフロー ファイル単位のため、リポジトリやワークフローを増やす場合はポリシーも増やします。
+  ポリシーはリポジトリ単位・ワークフローファイル単位のため、リポジトリやワークフローを増やす場合はポリシーも増やします。
 - **パッケージを追加した場合は、nuget.org のポリシーにもパッケージ ID を追記**してください
   （`release-config.json` の `packages[]` への追加だけでは公開できません）。
-- ワークフローが `main`（または `release/X.Y`）へ push するため、**ブランチ保護**で `github-actions[bot]` の push が拒否される場合は許可設定（または PAT への切り替え）が必要です。
+- ワークフローが `main` へ push するため、**ブランチ保護**で `github-actions[bot]` の push が拒否される場合は許可設定（または PAT への切り替え）が必要です。
 - `release.yml` は `actions: write` 権限を使用します（ゲートの参照と、バージョンコミットの検証の起動）。
-- `build.yml` は `main` / `dev` / `release/**` への push のたびにビルド・テストし、nupkg を保管します（ドキュメントのみの変更でも実行されます）。公開は行わないため、push で NuGet.org が更新されることはありません。
+- `build.yml` は **`main` への push と `main` 向け PR のたびに必ず**ビルド・テストし、nupkg を保管します（ドキュメントのみの変更でも実行されます）。公開は行わないため、push で NuGet.org が更新されることはありません。
+- `dev` への push では Build は実行されません。`dev` で検証する場合は `Actions` → Build → **Run workflow** でブランチに `dev` を選んで実行してください。
 - アーティファクトの保持期間は `release-config.json` の `artifactRetentionDays`（既定 30 日）です。リリース時に改めて pack するため、保管はゲートの記録と確認用です。
 - `release.yml` の `publish` と `release` は別ジョブのため、バージョンは 2 回適用されます（publish は作業ツリーのみ、release はコミット）。どちらも冪等で、同一の入力から同一の成果物になります。
+- **タグは Release 実行時に作成されます**（ローカルからのタグ push は行いません）。[タグの保護（Tag ruleset）](#タグの保護tag-ruleset) を有効にしている場合は、拒否されます。
+- Dependabot の Pull Request が `main` へマージされた場合も、`main` への push として `build.yml`（ゲート）が実行されます（[依存関係の更新](#依存関係の更新dependabot)）。

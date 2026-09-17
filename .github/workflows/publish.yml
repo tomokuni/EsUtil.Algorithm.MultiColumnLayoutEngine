@@ -1,7 +1,10 @@
 # パッケージを pack して NuGet.org / GitHub Packages へ公開する再利用ワークフロー（workflow_call）。
 #
-# 配布するパッケージの定義（名前・プロジェクト）は .github/release-config.json が単一所有する。
+# 配布するパッケージの定義（名前・プロジェクト）は .github/release-config.json が単一所有し、
+# 読み取りは .github/actions/read-config に集約している。
 # パッケージを追加・変更する場合はこのファイルだけを変更する（ワークフローの変更は不要）。
+#
+# .NET SDK のバージョンはリポジトリルートの global.json が単一所有する（ワークフローでは指定しない）。
 #
 # 呼び出し側:
 #   release.yml … リリース時に呼ぶ（version を渡し、そのバージョンで pack してから公開する）
@@ -37,22 +40,17 @@ jobs:
     outputs:
       packages: ${{ steps.read.outputs.packages }}
       version_file: ${{ steps.read.outputs.version_file }}
-      retention: ${{ steps.read.outputs.retention }}
+      retention: ${{ steps.read.outputs.artifact_retention_days }}
       nuget_user: ${{ steps.read.outputs.nuget_user }}
       nuget_source: ${{ steps.read.outputs.nuget_source }}
     steps:
       - name: チェックアウト
         uses: actions/checkout@v5
 
-      - name: release-config.json を読む
+      # matrix で使う packages（1 行の JSON）を含め、全設定をここで読み取る
+      - name: リリース設定を読む
         id: read
-        run: |
-          # matrix で使うため 1 行の JSON として出力する
-          echo "packages=$(jq -c .packages .github/release-config.json)" >> "$GITHUB_OUTPUT"
-          echo "version_file=$(jq -r .versionFile .github/release-config.json)" >> "$GITHUB_OUTPUT"
-          echo "retention=$(jq -r .artifactRetentionDays .github/release-config.json)" >> "$GITHUB_OUTPUT"
-          echo "nuget_user=$(jq -r .nuget.user .github/release-config.json)" >> "$GITHUB_OUTPUT"
-          echo "nuget_source=$(jq -r .nuget.source .github/release-config.json)" >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/read-config
 
   # ────────────────────────────────────────────────────────────
   # 2. 全パッケージを pack して保管（公開は次のジョブ）
@@ -72,7 +70,10 @@ jobs:
       - name: .NET SDK をセットアップ
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          # バージョンは global.json が単一所有する（dotnet-version は指定しない）
+          # NuGet のグローバル パッケージ フォルダをキャッシュする
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       # リリース時は、コミット前に pack するため作業ツリーへバージョンを適用する
       # （公開するパッケージと、リリースでコミットするバージョンを一致させる）
@@ -116,10 +117,10 @@ jobs:
       # GitHub Packages への push
       packages: write
     steps:
+      # バージョンは global.json が単一所有する（dotnet-version は指定しない）
+      # ここでは復元を行わないためキャッシュは使わない（dotnet nuget push のみ）
       - name: .NET SDK をセットアップ
         uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.0.x'
 
       # pack ジョブが保管したパッケージを 1 つのフォルダへ集約する
       - name: 成果物をダウンロード

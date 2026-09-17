@@ -67,7 +67,7 @@ function Test-PrereleaseVersion {
 .SYNOPSIS
 バージョンの系列（major.minor）を取得する。
 .DESCRIPTION
-系列はリリースの互換性の単位であり、バックポート用ブランチ（release/X.Y）の名前に一致する。
+系列はリリースの互換性の単位であり、同じ系列の中でのみバージョンを比較する（バックポートの判定に使う）。
 .PARAMETER Version
 系列を取得するバージョン（例: 1.2.3）。
 .OUTPUTS
@@ -174,4 +174,48 @@ function Get-TagName {
     )
 
     return "v$Version"
+}
+
+<#
+.SYNOPSIS
+リポジトリのタグのうち、リリース済みとみなせるバージョンを 1 件ずつ出力する。
+.DESCRIPTION
+`v` で始まるタグを対象とし、形式の判定はバージョンの規則（ConvertTo-SemanticVersion）に委譲する。
+`v1.2` のような semver でないタグは対象外とする。
+
+呼び出し側は `@(Get-ReleasedVersions -RepoRoot $RepoRoot)` として配列で受け取る
+（0 件の場合は空の配列になる。パイプラインへ 1 件ずつ出力するため、複数件でも展開されない）。
+.PARAMETER RepoRoot
+リポジトリのルート。省略時はカレントディレクトリ。
+.OUTPUTS
+System.String
+`v` を除いた semver 文字列（例: 1.2.3）。
+.EXAMPLE
+$released = @(Get-ReleasedVersions -RepoRoot $RepoRoot)
+#>
+function Get-ReleasedVersions {
+    [CmdletBinding()]
+    param(
+        [string]$RepoRoot
+    )
+
+    $tags = @()
+
+    if ($RepoRoot) {
+        $tags = @(& git -C $RepoRoot tag -l 'v*')
+    }
+    else {
+        $tags = @(& git tag -l 'v*')
+    }
+
+    foreach ($name in ($tags | Where-Object { $_ })) {
+        try {
+            # 形式が不正なタグ（v1.2 など）は対象外とする
+            $null = ConvertTo-SemanticVersion -Version $name.Substring(1)
+            Write-Output $name.Substring(1)
+        }
+        catch {
+            continue
+        }
+    }
 }

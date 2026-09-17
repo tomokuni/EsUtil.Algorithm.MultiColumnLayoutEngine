@@ -1,0 +1,48 @@
+# 依存関係（GitHub Actions と NuGet パッケージ）の更新を検知し、Pull Request を作成する。
+#
+# 作成された Pull Request は build.yml（main 向け PR）でビルドとテストが実行される。
+# 内容を確認して main へマージする（方式は Squash merge を推奨）。
+#
+# 注意事項:
+# - Dependabot の Pull Request は fork 相当（読み取り専用トークン・シークレット無し）で実行される。
+#   本リポジトリの build.yml はシークレットを使用しないため、CI はそのまま動作する。
+# - NuGet のメジャー更新（xunit 3 系など、API が大きく変わるもの）は自動では作成しない。
+version: 2
+
+updates:
+  # ─── GitHub Actions（.github/workflows の uses: で参照しているアクション）───
+  - package-ecosystem: "github-actions"
+    # GitHub Actions の場合は "/" を指定する（/.github/workflows が走査される）
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    # 既定は 5 件。アクションの数が少ないため既定のままで足りる
+    open-pull-requests-limit: 5
+    groups:
+      # 複数のアクションを 1 つの Pull Request にまとめる（レビューとマージの回数を減らす）
+      actions:
+        patterns: ["*"]
+
+  # ─── NuGet（テストプロジェクトのパッケージ）───
+  - package-ecosystem: "nuget"
+    # マニフェスト（.csproj）があるディレクトリを指定する（リポジトリルートからの相対パス）
+    directories:
+      - "/src"
+      - "/test"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    groups:
+      # minor / patch を 1 つの Pull Request にまとめる
+      nuget-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # xunit 3 系はテストの書き方が変わる（破壊的変更）ため、メジャー更新は手動で判断する
+      - dependency-name: "xunit"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "xunit.runner.visualstudio"
+        update-types: ["version-update:semver-major"]

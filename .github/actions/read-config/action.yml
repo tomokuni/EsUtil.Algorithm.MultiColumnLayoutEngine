@@ -1,0 +1,100 @@
+# リリース設定（.github/release-config.json）を読み、各値を出力する複合アクション。
+#
+# 本アクションは「読み取り」だけを行い、ファイルや外部の状態を変更しない。
+# ワークフローからは次のように呼ぶ（リポジトリ内のアクションを参照するため checkout が必要）。
+#
+#   - name: チェックアウト
+#     uses: actions/checkout@v5
+#
+#   - name: リリース設定を読む
+#     id: config
+#     uses: ./.github/actions/read-config
+#
+#   - run: echo "${{ steps.config.outputs.version_file }}"
+#
+# 設定の値は複数行（releaseNotes）を含む可能性があるため、GITHUB_OUTPUT へは
+# ヒアドキュメント形式（name<<delimiter）で書き出す。
+name: release-config を読む
+description: release-config.json（リリース設定の単一ソース）を読み、各値を出力する
+
+inputs:
+  config_path:
+    description: 設定ファイルのパス（リポジトリルートからの相対パス）
+    required: false
+    default: .github/release-config.json
+
+outputs:
+  product:
+    description: リリース名とアセットのタイトルに使う表示名
+    value: ${{ steps.read.outputs.product }}
+  version_file:
+    description: バージョン（<Version>）を記載するファイル（リポジトリルートからの相対パス）
+    value: ${{ steps.read.outputs.version_file }}
+  gate_workflow:
+    description: リリースの前提（ゲート）となるワークフローのファイル名
+    value: ${{ steps.read.outputs.gate_workflow }}
+  release_branches:
+    description: リリースを許可するブランチのパターン（1 行の JSON 配列）
+    value: ${{ steps.read.outputs.release_branches }}
+  artifact_retention_days:
+    description: アーティファクトの保持日数
+    value: ${{ steps.read.outputs.artifact_retention_days }}
+  release_notes:
+    description: Release 本文の冒頭に付ける説明
+    value: ${{ steps.read.outputs.release_notes }}
+  nuget_user:
+    description: NuGet.org のプロファイル名（メールアドレスではない）
+    value: ${{ steps.read.outputs.nuget_user }}
+  nuget_source:
+    description: NuGet の公開先
+    value: ${{ steps.read.outputs.nuget_source }}
+  packages:
+    description: 公開するパッケージの定義（1 行の JSON 配列。matrix へ渡す）
+    value: ${{ steps.read.outputs.packages }}
+
+runs:
+  using: composite
+  steps:
+    - name: release-config.json を読む
+      id: read
+      shell: pwsh
+      env:
+        CONFIG_PATH: ${{ inputs.config_path }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+
+        $path = $env:CONFIG_PATH
+
+        if (-not (Test-Path -LiteralPath $path)) {
+          throw "設定ファイルが見つかりません: $path"
+        }
+
+        $config = Get-Content $path -Raw | ConvertFrom-Json
+
+        # 値に改行が含まれても壊れないよう、ヒアドキュメント形式で書き出す
+        function Set-ActionOutput {
+          param(
+            [Parameter(Mandatory)][string]$Name,
+            [AllowEmptyString()][string]$Value
+          )
+
+          $delimiter = "EOF_$([guid]::NewGuid().ToString('N'))"
+          "$Name<<$delimiter" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $delimiter | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        }
+
+        Set-ActionOutput 'product' $config.product
+        Set-ActionOutput 'version_file' $config.versionFile
+        Set-ActionOutput 'gate_workflow' $config.gateWorkflow
+        # 未指定（null）の場合は空の配列として出力する
+        # -AsArray を付けないと、要素が 1 件のときに配列が単一の値へ潰れる（matrix が壊れる）
+        Set-ActionOutput 'release_branches' (@($config.releaseBranches) | ConvertTo-Json -Compress -AsArray)
+        Set-ActionOutput 'artifact_retention_days' ([string]$config.artifactRetentionDays)
+        Set-ActionOutput 'release_notes' $config.releaseNotes
+        Set-ActionOutput 'nuget_user' $config.nuget.user
+        Set-ActionOutput 'nuget_source' $config.nuget.source
+        # matrix へ渡すため 1 行の JSON にする（-AsArray については release_branches と同じ）
+        Set-ActionOutput 'packages' (@($config.packages) | ConvertTo-Json -Compress -Depth 5 -AsArray)
+
+        Write-Host "リリース設定を読み込みました: $path"
