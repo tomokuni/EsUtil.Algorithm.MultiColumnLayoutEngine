@@ -21,9 +21,9 @@
     <RepositoryUrl>https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Authors>SEKIYA Tomokuni</Authors>
+    <Authors>SEKIYA.Tomokuni</Authors>
     <Company>Estable</Company>
-    <Copyright>SEKIYA Tomokuni</Copyright>
+    <Copyright>SEKIYA.Tomokuni</Copyright>
     <PublishTrimmed>False</PublishTrimmed>
     <PublishAot>False</PublishAot>
     <GenerateDocumentationFile>False</GenerateDocumentationFile>

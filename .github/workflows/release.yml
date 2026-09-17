@@ -7,10 +7,10 @@
 #   publish … 全パッケージを pack して NuGet.org / GitHub Packages へ公開（実装は publish.yml に集約）
 #   release … バージョンをコミットして push し、タグと GitHub Release を作成する
 #
-# 順序の意図: 取り消せない外部公開（NuGet.org）を、バージョンコミットとタグ作成より前に置く。
-# これにより、公開に失敗してもタグが消費されず同じバージョンで再実行できる。
-# NuGet.org / GitHub Packages への push は --skip-duplicate で冪等なため、
-# タグ作成後に失敗した場合も同じバージョンで再実行すれば未完了分だけが進む。
+# 注意: 外部公開（NuGet.org / GitHub Packages）は、バージョンコミットとタグ作成より前に実行する。
+# NuGet は同じバージョンを再利用できないため、公開に失敗してもタグとバージョンを消費しないようにする。
+# 各公開は --skip-duplicate で冪等にしてあり、同じバージョンで再実行すると未完了分だけが進む。
+# また、タグは gh release create --target に作成させる（公開の成功後にのみタグが作られる）。
 #
 # GITHUB_TOKEN による push はワークフローを再トリガーしないため、Build が連鎖起動しない。
 name: Release

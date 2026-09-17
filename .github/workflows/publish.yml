@@ -12,6 +12,8 @@
 # 注意: nuget.org の Trusted Publishing ポリシーは「OIDC トークンを要求するワークフローのファイル名」で
 # 検証される。トークンの要求元は本ワークフロー（publish.yml）であるため、ポリシーの Workflow File には
 # publish.yml を指定する（呼び出し元の release.yml ではない）。
+# ポリシーはリポジトリ単位で、Glob Patterns and Packages に公開するパッケージ ID を明示している。
+# release-config.json へパッケージを追加した場合は、nuget.org のポリシーにもそのパッケージ ID を追記すること。
 name: Publish
 
 on:

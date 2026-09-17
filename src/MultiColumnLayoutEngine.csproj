@@ -28,9 +28,9 @@
     <RepositoryUrl>https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Authors>SEKIYA Tomokuni</Authors>
+    <Authors>SEKIYA.Tomokuni</Authors>
     <Company>Estable</Company>
-    <Copyright>SEKIYA Tomokuni</Copyright>
+    <Copyright>SEKIYA.Tomokuni</Copyright>
     <!-- GeneratePackageOnBuild は使用しない（クリーンな状態の dotnet pack が NU5026 で失敗するため） -->
     <!-- パッケージ化は build の後に pack を no-build で実行する（.github/workflows の build.yml / publish.yml を参照） -->
     <PackageReadmeFile>README.md</PackageReadmeFile>
