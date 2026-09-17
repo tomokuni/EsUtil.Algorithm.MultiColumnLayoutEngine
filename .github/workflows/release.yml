@@ -1,4 +1,4 @@
-# EsUtil.Algorithm.MultiColumnLayoutEngine のリリースワークフロー
+# リリースワークフロー（全リポジトリで同一の内容。リポジトリ固有の設定は .github/release-config.json が持つ）
 #
 # 自動インクリメントは行わない。実行は手動（Actions → Release → Run workflow）のみで、
 # **main ブランチからのみ実行できる**（それ以外のブランチでは検証で失敗する）。

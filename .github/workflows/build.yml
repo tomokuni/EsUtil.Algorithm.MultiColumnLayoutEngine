@@ -1,4 +1,4 @@
-# EsUtil.Algorithm.MultiColumnLayoutEngine のビルドワークフロー
+# ビルドワークフロー（全リポジトリで同一の内容。リポジトリ固有の設定は .github/release-config.json が持つ）
 #
 # 実行契機は次のとおり。
 #   main への push（マージ含む） … 必ず実行する
@@ -17,6 +17,7 @@
 # 本ワークフローの成功は「パッケージが作成できる」ことも意味する。
 #
 # .NET SDK のバージョンはリポジトリルートの global.json が単一所有する（ワークフローでは指定しない）。
+# dotnet の対象（ソリューション ファイル）は release-config.json の solutionFile が単一所有する。
 # NuGet パッケージのキャッシュは setup-dotnet の cache 機能を使う（actions/cache を別途書かない）。
 #
 # README の「build」バッジはこのワークフローの status を表示する（badge.svg?branch=main）。
@@ -61,19 +62,20 @@ jobs:
           cache-dependency-path: '**/*.csproj'
 
       # 以降は --no-restore / --no-build で工程を分け、失敗箇所を切り分けやすくする
+      # パスは設定（release-config.json）が持つため、空白を含んでいても壊れないよう引用符で囲む
       - name: 復元
-        run: dotnet restore MultiColumnLayoutEngine.slnx
+        run: dotnet restore '${{ steps.config.outputs.solution_file }}'
 
       - name: ビルド（Release）
-        run: dotnet build MultiColumnLayoutEngine.slnx -c Release --no-restore
+        run: dotnet build '${{ steps.config.outputs.solution_file }}' -c Release --no-restore
 
       - name: テスト（Release）
-        run: dotnet test MultiColumnLayoutEngine.slnx -c Release --no-build
+        run: dotnet test '${{ steps.config.outputs.solution_file }}' -c Release --no-build
 
       # 公開はしないが、pack が通ることを検証し、内容の確認用に nupkg を保管する
       # pack する対象はソリューションが持つ（パッケージの定義をワークフローへ書き戻さない）
       - name: パッケージを作成
-        run: dotnet pack MultiColumnLayoutEngine.slnx -c Release --no-build -o ./artifacts
+        run: dotnet pack '${{ steps.config.outputs.solution_file }}' -c Release --no-build -o ./artifacts
 
       - name: パッケージを保管
         uses: actions/upload-artifact@v6

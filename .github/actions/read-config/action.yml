@@ -14,6 +14,9 @@
 #
 # 設定の値は複数行（releaseNotes）を含む可能性があるため、GITHUB_OUTPUT へは
 # ヒアドキュメント形式（name<<delimiter）で書き出す。
+#
+# 必須のキー（product / versionFile / solutionFile / gateWorkflow / packages）が欠けている場合は
+# ここで失敗させる（ワークフロー側で原因の分かりにくいエラーになるのを防ぐ）。
 name: release-config を読む
 description: release-config.json（リリース設定の単一ソース）を読み、各値を出力する
 
@@ -30,6 +33,9 @@ outputs:
   version_file:
     description: バージョン（<Version>）を記載するファイル（リポジトリルートからの相対パス）
     value: ${{ steps.read.outputs.version_file }}
+  solution_file:
+    description: ビルド・テスト・pack の対象となるソリューション ファイル（リポジトリルートからの相対パス）
+    value: ${{ steps.read.outputs.solution_file }}
   gate_workflow:
     description: リリースの前提（ゲート）となるワークフローのファイル名
     value: ${{ steps.read.outputs.gate_workflow }}
@@ -71,6 +77,13 @@ runs:
 
         $config = Get-Content $path -Raw | ConvertFrom-Json
 
+        # 必須の値が抜けていると、ワークフロー側で原因の分かりにくいエラーになるため、ここで止める
+        foreach ($key in @('product', 'versionFile', 'solutionFile', 'gateWorkflow', 'packages')) {
+          if (-not $config.PSObject.Properties[$key] -or -not $config.$key) {
+            throw "設定に $key がありません（値が空）: $path"
+          }
+        }
+
         # 値に改行が含まれても壊れないよう、ヒアドキュメント形式で書き出す
         function Set-ActionOutput {
           param(
@@ -86,6 +99,7 @@ runs:
 
         Set-ActionOutput 'product' $config.product
         Set-ActionOutput 'version_file' $config.versionFile
+        Set-ActionOutput 'solution_file' $config.solutionFile
         Set-ActionOutput 'gate_workflow' $config.gateWorkflow
         # 未指定（null）の場合は空の配列として出力する
         # -AsArray を付けないと、要素が 1 件のときに配列が単一の値へ潰れる（matrix が壊れる）

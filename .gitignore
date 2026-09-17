@@ -19,6 +19,7 @@ packages/
 
 # Local NuGet source
 local-nuget/
+artifacts/
 
 # BenchmarkDotNet
 BenchmarkDotNet.Artifacts/

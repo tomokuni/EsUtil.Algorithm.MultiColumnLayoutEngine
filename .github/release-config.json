@@ -1,13 +1,14 @@
 {
   "product": "EsUtil.Algorithm.MultiColumnLayoutEngine",
   "versionFile": "Directory.Build.props",
+  "solutionFile": "MultiColumnLayoutEngine.slnx",
   "gateWorkflow": "build.yml",
   "releaseBranches": [
     "main",
     "release/**"
   ],
   "artifactRetentionDays": 30,
-  "releaseNotes": "複数アイテムを垂直方向の複数列へ配置し、最大列高さを最小化するレイアウト最適化ライブラリです。DP 法・Greedy 法・BinarySearch 法の 3 つのアルゴリズムを切り替えて使用できます。NuGet.org と GitHub Packages の両方に公開しています。",
+  "releaseNotes": "複数アイテムを垂直方向の複数列へ配置し、最大列高さを最小化するレイアウト最適化ライブラリです。",
   "nuget": {
     "user": "SEKIYA.Tomokuni",
     "source": "https://api.nuget.org/v3/index.json"

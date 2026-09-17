@@ -5,7 +5,8 @@
 
 ## 何が流用できるか
 
-リポジトリ固有の設定は `release-config.json` にあります。それ以外のファイルは汎用です。
+リポジトリ固有の設定は `release-config.json` にあります。それ以外のファイルは汎用です
+（`workflows/`・`scripts/`・`actions/` は**全リポジトリで同一のファイル**です）。
 
 | ファイル | 流用 | 備考 |
 | --- | --- | --- |
@@ -20,7 +21,7 @@
 | [`rulesets/tag-version.json`](rulesets/tag-version.json) | **コピー（編集不要）** | Tag ruleset の定義。リポジトリの Settings へインポートする |
 | [`workflows/publish.yml`](workflows/publish.yml) | **そのまま** | 設定を読んで pack し、NuGet.org / GitHub Packages へ公開する |
 | [`workflows/release.yml`](workflows/release.yml) | **そのまま** | 設定を読むため変更不要 |
-| [`workflows/build.yml`](workflows/build.yml) | **コピーして編集** | ビルド・テストのコマンドのみリポジトリ依存 |
+| [`workflows/build.yml`](workflows/build.yml) | **そのまま** | ビルド・テスト・pack の対象は `solutionFile` が持つため変更不要 |
 | 本ドキュメント・`RELEASE.md` | コピーして調整 | |
 
 ## 手順
@@ -85,6 +86,7 @@
 | --- | --- | --- |
 | `product` | リリース名とアセットのタイトルに使う表示名 | `"EsUtil.Algorithm.MultiColumnLayoutEngine"` |
 | `versionFile` | バージョン（`<Version>`）を記載するファイル（リポジトリルートからの相対パス） | `"Directory.Build.props"` |
+| `solutionFile` | ビルド・テスト・pack の対象となるソリューション ファイル（リポジトリルートからの相対パス） | `"EsUtil.Other.Library.slnx"` |
 | `gateWorkflow` | リリースの前提（ゲート）となるワークフローのファイル名 | `"build.yml"` |
 | `releaseBranches` | **リリースを許可するブランチ**（完全一致とワイルドカード。未指定は `main` のみ。`release/` 配下は `release/<major>.<minor>` の形式に限定される） | `["main"]` / `["main", "release/**"]` |
 | `artifactRetentionDays` | アーティファクトの保持日数 | `30` |
@@ -104,27 +106,23 @@
 
 設定の値は [`actions/read-config`](actions/read-config/action.yml) がまとめて読み取ります。
 **キーを追加する場合は、同アクションの `outputs` にも追加してください**（追加しないとワークフローから参照できません）。
+**必須のキー（`product` / `versionFile` / `solutionFile` / `gateWorkflow` / `packages`）が空の場合、読み取り時に失敗します**
+（ワークフロー側で原因の分かりにくいエラーになるのを防ぐため）。
 
 > **注意**: バージョンはリポジトリルートの `Directory.Build.props` に `<Version>` として記載し、
 > 各 `.csproj` には記載しないでください（全プロジェクトが同じ値を継承します）。複数プロジェクトで共有する場合も同じ構成にします。
 
-### 3. `build.yml` を編集する
+### 3. `release-config.json` の `solutionFile` を設定する
 
-`build` ジョブのコマンドのみ、リポジトリに合わせて変更します。
+`release-config.json` の `solutionFile` に、ビルド・テスト・pack の対象となるソリューション ファイル
+（リポジトリルートからの相対パス）を記載します。**ワークフローの編集は不要です。**
 
-```yaml
-      - name: 復元
-        run: dotnet restore <ソリューション>.slnx
-
-      - name: ビルド（Release）
-        run: dotnet build <ソリューション>.slnx -c Release --no-restore
-
-      - name: テスト（Release）
-        run: dotnet test <ソリューション>.slnx -c Release --no-build
-
-      - name: パッケージを作成
-        run: dotnet pack <ソリューション>.slnx -c Release --no-build -o ./artifacts
+```json
+  "solutionFile": "EsUtil.Other.Library.slnx",
 ```
+
+`workflows/build.yml`・`workflows/publish.yml`・`workflows/release.yml` は**全リポジトリで同一のファイル**です
+（リポジトリ名・ソリューション名を含まないため、そのままコピーして使用できます）。
 
 - **SDK のバージョンは `global.json` に記載します**（ワークフローへ `dotnet-version` を書きません。`actions/setup-dotnet` が `global.json` を読むため、記載箇所を 1 つにできます）。
   `actions/setup-dotnet` の `cache: true` と `cache-dependency-path: '**/*.csproj'` で NuGet のグローバル パッケージ フォルダがキャッシュされます。
@@ -144,7 +142,7 @@
 
 | 入力項目 | 指定値 |
 | --- | --- |
-| Repository Owner / Repository | 新しいリポジトリの値（例: `tomokuni` / `EsUtil.Helper.ZenHanConverter`） |
+| Repository Owner / Repository | 新しいリポジトリの値（例: `tomokuni` / `EsUtil.Algorithm.MultiColumnLayoutEngine`） |
 | Glob Patterns and Packages | 公開するパッケージ ID（1 行に 1 つ。例: `EsUtil.Algorithm.MultiColumnLayoutEngine`） |
 
 **注意事項**:
@@ -185,6 +183,7 @@ dotnet test MultiColumnLayoutEngine.slnx -c Release --no-build
 ## 変更時の注意事項
 
 - **パッケージの定義（`packages[]`）は `release-config.json` に置いてください。** ワークフローへ書き戻すと二重管理になり、追加時に漏れます。
+- **ビルド対象のソリューション ファイル（`solutionFile`）は `release-config.json` に置いてください。** ワークフローへソリューション名を書くと、リポジトリごとにワークフローが分かれます（`build.yml` / `publish.yml` / `release.yml` は全リポジトリで同一に保ちます）。
 - **設定の読み取りは `actions/read-config` に置いてください。** ワークフローごとに `jq` などで読み直すと、キーを追加したときに読み取り漏れが起きます。
 - **.NET SDK のバージョンは `global.json` に置いてください。** ワークフローへ `dotnet-version` を書くと二重管理になり、更新時にずれます。
 - **バージョンの規則（形式・比較・系列・タグの列挙）は `scripts/version.ps1` に置いてください。** 他のスクリプトで再実装すると判定がずれます。

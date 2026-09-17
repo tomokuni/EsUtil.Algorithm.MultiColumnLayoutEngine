@@ -12,7 +12,7 @@
 
 | ファイル | 内容 |
 | --- | --- |
-| [`release-config.json`](release-config.json) | プロダクト名、バージョンファイル、ゲートのワークフロー、**リリースを許可するブランチ**、パッケージの定義、NuGet.org の接続先 |
+| [`release-config.json`](release-config.json) | プロダクト名、バージョンファイル、**ビルド対象のソリューション ファイル**、ゲートのワークフロー、**リリースを許可するブランチ**、パッケージの定義、NuGet.org の接続先 |
 | [`actions/read-config`](actions/read-config/action.yml) | `release-config.json` を読んで各ワークフローへ渡す共通アクション（読み取りの実装はここだけ） |
 | [`../Directory.Build.props`](../Directory.Build.props) | リリースバージョン（`<Version>`）。各 `.csproj` では指定しない |
 | [`../global.json`](../global.json) | .NET SDK のバージョン。ワークフローでは指定しない |
@@ -20,6 +20,7 @@
 | [`scripts/version.ps1`](scripts/version.ps1) | バージョンの規則（形式・比較・系列・プレリリース判定・タグの列挙） |
 
 パッケージの追加・変更は **`release-config.json` の `packages[]` を編集します**（ワークフローとスクリプトの変更は不要です）。
+**ビルド・テスト・pack の対象は `solutionFile` が持ちます**（ワークフローには書きません）。
 **リリースを許可するブランチは `releaseBranches` が持ちます**（本リポジトリは `["main", "release/**"]`。
 `release/` 配下は **`release/<major>.<minor>` の形式**に限定され、入力バージョンの系列と一致させる必要があります）。
 
@@ -54,8 +55,11 @@
   リリース時に `release.yml` がこの 1 行を入力値へ書き換えてコミットします。
 - **.NET SDK のバージョンは `global.json` に記載し、ワークフローには記載しないでください**
   （`actions/setup-dotnet` が `global.json` を読むため、`dotnet-version` の指定は不要です）。
-- 同じ設定を複数箇所に置かないでください（例: パッケージの定義をワークフローへ直接書く、バージョンを `.csproj` にも書く、SDK のバージョンをワークフローにも書く）。
+- 同じ設定を複数箇所に置かないでください（例: パッケージの定義をワークフローへ直接書く、ソリューション名をワークフローへ書く、バージョンを `.csproj` にも書く、SDK のバージョンをワークフローにも書く）。
   変更時の注意事項は [`REUSING.md`](REUSING.md) にも記載しています。
+- **`build.yml` / `publish.yml` / `release.yml` は全リポジトリで同一の内容です**（リポジトリ固有の値は
+  `release-config.json` が持ちます）。ワークフローへリポジトリ名・ソリューション名・パッケージ ID を
+  書き戻さないでください（流用時にそのままコピーできる状態を保ちます）。
 
 ## 依存関係の更新（Dependabot）
 
@@ -336,15 +340,14 @@ Workflow File → Environment → Select Scopes → Glob Patterns and Packages**
 コピーして使用できます。
 
 1. 対象リポジトリへ `.github`（`workflows/`・`scripts/`・`release-config.json`）と `Directory.Build.props` をコピーする
-   - `release-config.json` の `product` / `packages[].project` を対象リポジトリに合わせて編集する
+   - `release-config.json` の `product` / `solutionFile` / `packages[].project` を対象リポジトリに合わせて編集する
    - `release-config.json` の `nuget.user` を nuget.org のプロファイル名にする
-   - `.github/workflows/build.yml` の `dotnet` コマンドを対象ソリューション／プロジェクトへ変更する
 2. コピーした `.github/workflows/publish.yml` を**対象リポジトリへ push** する（ポリシーはファイル名で検証されます）
 3. nuget.org → **Trusted Publishing** → **Add a new trusted publishing policy** を開き、次の値を指定して保存する
 
    | 入力項目 | 指定値 | 本リポジトリとの関係 |
    | --- | --- | --- |
-   | **Policy Name** | 対象リポジトリ名（例: `EsUtil.Helper.ZenHanConverter`）。任意（64 文字以内） | リポジトリごとに変える |
+   | **Policy Name** | 対象リポジトリ名（例: `EsUtil.Algorithm.MultiColumnLayoutEngine`）。任意（64 文字以内） | リポジトリごとに変える |
    | Package Owner | パッケージを所有するアカウント | 共通 |
    | CI/CD Provider | `GitHub Actions` | 共通 |
    | Repository Owner | `tomokuni` | 共通 |
@@ -357,8 +360,8 @@ Workflow File → Environment → Select Scopes → Glob Patterns and Packages**
 ```text
 nuget.org のポリシー（リポジトリごとに 1 つ）
 ├── policy: EsUtil.Algorithm.MultiColumnLayoutEngine / publish.yml / EsUtil.Algorithm.MultiColumnLayoutEngine
-├── policy: EsUtil.Helper.ZenHanConverter           / publish.yml / EsUtil.Helper.ZenHanConverter
-└── policy: EsUtil.XXX                              / publish.yml / EsUtil.XXX
+├── policy: EsUtil.Other.Library         / publish.yml / EsUtil.Other.Library
+└── policy: EsUtil.XXX                   / publish.yml / EsUtil.XXX
 ```
 
 **注意事項**:
