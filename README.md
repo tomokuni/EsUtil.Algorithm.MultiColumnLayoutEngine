@@ -5,7 +5,7 @@
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0078D4)](https://dotnet.microsoft.com/platform/support/policy/dotnet-core)
 
-# VerticalMultiColumnLayout
+# MultiColumnLayoutEngine
 
 ## 概要
 
