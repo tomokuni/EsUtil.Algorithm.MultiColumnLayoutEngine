@@ -18,7 +18,11 @@
 #
 # .NET SDK のバージョンはリポジトリルートの global.json が単一所有する（ワークフローでは指定しない）。
 # dotnet の対象（ソリューション ファイル）は release-config.json の solutionFile が単一所有する。
-# NuGet パッケージのキャッシュは setup-dotnet の cache 機能を使う（actions/cache を別途書かない）。
+# .NET SDK はランナー イメージに含まれる最新版をそのまま使う（actions/setup-dotnet は使わない）。
+# イメージの SDK は /usr/share/dotnet に入り PATH も通っているため、そのまま dotnet を実行できる。
+# global.json は rollForward: latestFeature のため、イメージの最新 SDK で要件を満たす。
+# setup-dotnet を使うと「チャネルの最新」を取得しようとしてイメージに無い版を毎回ダウンロードする。
+# キャッシュは NuGet の復元（最も時間を使う工程）だけを対象にする。
 #
 # README の「build」バッジはこのワークフローの status を表示する（badge.svg?branch=main）。
 name: Build
@@ -56,13 +60,19 @@ jobs:
         id: config
         uses: ./.github/actions/read-config
 
-      - name: .NET SDK をセットアップ
-        uses: actions/setup-dotnet@v5
+      # .NET SDK はランナー イメージの最新版を使う（setup-dotnet は不要。イメージが /usr/share/dotnet を
+      # PATH へ追加しているため、以降のステップでそのまま dotnet を実行できる）。
+      # NuGet のグローバル パッケージ フォルダはキャッシュする（復元が最も時間を使う工程のため）。
+      - name: NuGet をキャッシュ
+        uses: actions/cache@v6
         with:
-          # バージョンは global.json が単一所有する（dotnet-version は指定しない）
-          # NuGet のグローバル パッケージ フォルダをキャッシュする
-          cache: true
-          cache-dependency-path: '**/*.csproj'
+          # 既定のグローバル パッケージ フォルダ（~/.nuget/packages）。NUGET_PACKAGES は変更しない
+          path: ~/.nuget/packages
+          # 参照しているパッケージが変わったときだけキャッシュを作り直す
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          # 一致するキャッシュが無い場合は直近のものから復元し、不足分だけをダウンロードさせる
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       # 以降は --no-restore / --no-build で工程を分け、失敗箇所を切り分けやすくする
       # パスは設定（release-config.json）が持つため、空白を含んでいても壊れないよう引用符で囲む

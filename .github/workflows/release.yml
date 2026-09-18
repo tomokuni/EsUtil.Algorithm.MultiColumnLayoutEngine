@@ -46,6 +46,8 @@ jobs:
   # ────────────────────────────────────────────────────────────
   verify:
     runs-on: ubuntu-latest
+    # 検証と gh への問い合わせのみ（実測 28 秒）。停止した場合に 6 時間（既定）待たないための上限
+    timeout-minutes: 30
     permissions:
       contents: read
       # Build（ゲート）の実行結果の参照
@@ -71,9 +73,8 @@ jobs:
           # タグの列挙のため全履歴を取得する
           fetch-depth: 0
 
-      # 「現在のバージョン状況」の表示で dotnet msbuild（PackageId の取得）を使うため、先に SDK を入れる
-      - name: .NET SDK をセットアップ
-        uses: actions/setup-dotnet@v5
+      # 「現在のバージョン状況」の表示で dotnet msbuild（PackageId の取得）を使う。
+      # SDK はランナー イメージの最新版をそのまま使う（setup-dotnet は不要。復元も行わない）
 
       # リリース設定（バージョンファイル・表示名・説明・ブランチ・ゲート）は release-config.json が単一所有する
       - name: リリース設定を読む
@@ -208,6 +209,8 @@ jobs:
     # ドライラン（バージョン未入力）では公開しない
     if: needs.verify.outputs.dry_run != 'true'
     # 呼び出される publish.yml が必要とする権限をここで付与する（それ以上は与えない）
+    # 注意: 再利用ワークフローを呼ぶジョブには timeout-minutes を指定できない（指定できるキーが限られる）。
+    # タイムアウトは呼び先の publish.yml の各ジョブが持つ
     permissions:
       contents: read
       # NuGet.org の Trusted Publishing（OIDC）
@@ -227,6 +230,8 @@ jobs:
     # ドライラン（バージョン未入力）ではコミット・タグ・Release を作成しない
     if: needs.verify.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
+    # バージョンのコミット・push と Release 作成（実測 28 秒）。停止した場合に 6 時間（既定）待たないための上限
+    timeout-minutes: 30
     permissions:
       # ブランチ push、タグ作成、Release 作成
       contents: write

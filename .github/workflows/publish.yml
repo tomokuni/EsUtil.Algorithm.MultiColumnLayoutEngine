@@ -37,6 +37,8 @@ jobs:
   # ────────────────────────────────────────────────────────────
   config:
     runs-on: ubuntu-latest
+    # 設定の読み取りのみ（実測 10 秒）。停止した場合に 6 時間（既定）待たないための上限
+    timeout-minutes: 10
     outputs:
       packages: ${{ steps.read.outputs.packages }}
       version_file: ${{ steps.read.outputs.version_file }}
@@ -58,6 +60,8 @@ jobs:
   pack:
     needs: config
     runs-on: ubuntu-latest
+    # ビルドと pack のみ（実測 1 分程度）。停止した場合に 6 時間（既定）待たないための上限
+    timeout-minutes: 30
     strategy:
       # 1 つ失敗しても他のパッケージの結果を確認できるよう継続する
       fail-fast: false
@@ -67,13 +71,16 @@ jobs:
       - name: チェックアウト
         uses: actions/checkout@v5
 
-      - name: .NET SDK をセットアップ
-        uses: actions/setup-dotnet@v5
+      # .NET SDK はランナー イメージの最新版を使う（setup-dotnet は不要）。
+      # NuGet のグローバル パッケージ フォルダはキャッシュする（pack が依存を復元するため）。
+      - name: NuGet をキャッシュ
+        uses: actions/cache@v6
         with:
-          # バージョンは global.json が単一所有する（dotnet-version は指定しない）
-          # NuGet のグローバル パッケージ フォルダをキャッシュする
-          cache: true
-          cache-dependency-path: '**/*.csproj'
+          # 既定のグローバル パッケージ フォルダ（~/.nuget/packages）。NUGET_PACKAGES は変更しない
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       # リリース時は、コミット前に pack するため作業ツリーへバージョンを適用する
       # （公開するパッケージと、リリースでコミットするバージョンを一致させる）
@@ -110,6 +117,8 @@ jobs:
   push:
     needs: [config, pack]
     runs-on: ubuntu-latest
+    # OIDC ログインと dotnet nuget push のみ（実測 30 秒）。停止した場合に 6 時間（既定）待たないための上限
+    timeout-minutes: 30
     permissions:
       contents: read
       # NuGet.org の Trusted Publishing（OIDC トークンの発行）
@@ -117,10 +126,8 @@ jobs:
       # GitHub Packages への push
       packages: write
     steps:
-      # バージョンは global.json が単一所有する（dotnet-version は指定しない）
-      # ここでは復元を行わないためキャッシュは使わない（dotnet nuget push のみ）
-      - name: .NET SDK をセットアップ
-        uses: actions/setup-dotnet@v5
+      # .NET SDK はランナー イメージの最新版を使う（setup-dotnet は不要）。
+      # ここでは復元を行わないため NuGet のキャッシュも使わない（dotnet nuget push のみ）
 
       # pack ジョブが保管したパッケージを 1 つのフォルダへ集約する
       - name: 成果物をダウンロード

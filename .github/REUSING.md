@@ -179,13 +179,14 @@ dotnet test MultiColumnLayoutEngine.slnx -c Release --no-build
 | **配布物がアプリ（複数の UI など）の場合** | `packages[]` を `uis[]`（名前・スクリプト・出力・配布名）へ置き換え、pack ステップを配布用スクリプトの実行に変えます。`release.yml` は保管された成果物をそのまま添付するため変更不要です |
 | **GitHub Packages へ公開しない** | `publish.yml` の `push` ジョブから該当ステップを削除し、`packages: write` 権限を外します（呼び出し元 `release.yml` の権限も合わせて外します） |
 | **タグの保護（Tag ruleset）を入れる** | `rulesets/tag-version.json` をそのまま使えます（`v*` の作成・更新・削除を禁止し、bypass に GitHub Actions を指定）。Settings → Rules → Rulesets → New ruleset → **Import a ruleset** で読み込んでください。手順は `RELEASE.md` の「リポジトリの設定（初回のみ）」を参照 |
+| **ビルドをもっと速くしたい** | `.NET SDK` は**ランナー イメージの最新版**をそのまま使います（`actions/setup-dotnet` を使わない）。イメージの SDK は PATH が通っており、`global.json` は `rollForward: latestFeature` のためイメージの最新 SDK で要件を満たします。`setup-dotnet` を使うと「チャネルの最新」を取得しようとしてイメージに無い版を毎回ダウンロードします。キャッシュは NuGet の復元のみを対象にします |
 
 ## 変更時の注意事項
 
 - **パッケージの定義（`packages[]`）は `release-config.json` に置いてください。** ワークフローへ書き戻すと二重管理になり、追加時に漏れます。
 - **ビルド対象のソリューション ファイル（`solutionFile`）は `release-config.json` に置いてください。** ワークフローへソリューション名を書くと、リポジトリごとにワークフローが分かれます（`build.yml` / `publish.yml` / `release.yml` は全リポジトリで同一に保ちます）。
 - **設定の読み取りは `actions/read-config` に置いてください。** ワークフローごとに `jq` などで読み直すと、キーを追加したときに読み取り漏れが起きます。
-- **.NET SDK のバージョンは `global.json` に置いてください。** ワークフローへ `dotnet-version` を書くと二重管理になり、更新時にずれます。
+- **.NET SDK のバージョンは `global.json` に置いてください。** ワークフローへ `dotnet-version` を書くと二重管理になり、更新時にずれます。SDK はランナー イメージの最新版を使うため `actions/setup-dotnet` は使いません（イメージに無い版を毎回ダウンロードしてしまうため）。
 - **バージョンの規則（形式・比較・系列・タグの列挙）は `scripts/version.ps1` に置いてください。** 他のスクリプトで再実装すると判定がずれます。
 - **バージョンを記載するファイルは 1 つにしてください**（本リポジトリは `Directory.Build.props`）。番号と成果物が不一致になるのを防ぎます。
 - **取り消せない外部公開（NuGet.org / GitHub Packages）は、バージョンコミットとタグ作成より前に実行してください。**

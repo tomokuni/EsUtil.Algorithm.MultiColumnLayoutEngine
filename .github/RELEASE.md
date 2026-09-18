@@ -53,8 +53,12 @@
 
 - リリースバージョンは `Directory.Build.props` の `<Version>` に記載し、**各 `.csproj` には記載しないでください**。
   リリース時に `release.yml` がこの 1 行を入力値へ書き換えてコミットします。
-- **.NET SDK のバージョンは `global.json` に記載し、ワークフローには記載しないでください**
-  （`actions/setup-dotnet` が `global.json` を読むため、`dotnet-version` の指定は不要です）。
+- **.NET SDK のバージョンは `global.json` に記載し、ワークフローには記載しないでください**。
+  - **.NET SDK はランナー イメージに含まれる最新版をそのまま使います**（`actions/setup-dotnet` は使いません）。
+    イメージの SDK は `/usr/share/dotnet` に入り PATH も通っているため、そのまま `dotnet` を実行できます。
+    `global.json` は `rollForward: latestFeature` のため、イメージの最新 SDK で要件を満たします。
+    `setup-dotnet` を使うと「チャネルの最新」を取得しようとして**イメージに無い版を毎回ダウンロード**します。
+  - キャッシュは NuGet の復元のみを対象にします（`build.yml` と `publish.yml` の `pack`）。
 - 同じ設定を複数箇所に置かないでください（例: パッケージの定義をワークフローへ直接書く、ソリューション名をワークフローへ書く、バージョンを `.csproj` にも書く、SDK のバージョンをワークフローにも書く）。
   変更時の注意事項は [`REUSING.md`](REUSING.md) にも記載しています。
 - **`build.yml` / `publish.yml` / `release.yml` は全リポジトリで同一の内容です**（リポジトリ固有の値は
