@@ -47,7 +47,7 @@ jobs:
       nuget_source: ${{ steps.read.outputs.nuget_source }}
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # matrix で使う packages（1 行の JSON）を含め、全設定をここで読み取る
       - name: リリース設定を読む
@@ -69,7 +69,7 @@ jobs:
         package: ${{ fromJson(needs.config.outputs.packages) }}
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # .NET SDK はランナー イメージの最新版を使う（setup-dotnet は不要）。
       # NuGet のグローバル パッケージ フォルダはキャッシュする（pack が依存を復元するため）。
@@ -104,7 +104,7 @@ jobs:
 
       # この成果物は公開（push ジョブ）と、Release への添付（release.yml）で使う
       - name: 成果物をアップロード
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.package.name }}
           path: artifacts/*.nupkg
@@ -131,7 +131,7 @@ jobs:
 
       # pack ジョブが保管したパッケージを 1 つのフォルダへ集約する
       - name: 成果物をダウンロード
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true

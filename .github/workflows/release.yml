@@ -68,7 +68,7 @@ jobs:
       release_notes: ${{ steps.config.outputs.release_notes }}
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # タグの列挙のため全履歴を取得する
           fetch-depth: 0
@@ -239,14 +239,14 @@ jobs:
       actions: write
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # バージョンコミットの push のため全履歴を取得する
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 成果物をダウンロード
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: assets
           # 各パッケージの成果物を 1 つのフォルダへ集約する（ファイル名は配布名のまま）
