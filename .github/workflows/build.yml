@@ -53,7 +53,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: チェックアウト
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # リリース設定（保持期間など）は release-config.json が単一所有する
       - name: リリース設定を読む
@@ -91,7 +91,7 @@ jobs:
         run: dotnet pack '${{ steps.config.outputs.solution_file }}' -c Release --no-build -o ./artifacts
 
       - name: パッケージを保管
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: nupkg
           path: artifacts/*.nupkg
