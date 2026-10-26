@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> このリポジトリは [EsUtil](https://github.com/tomokuni/EsUtil) へ**移行（マージ）**しました。 今後の更新は行いません。
+>
+> - 後継: [`EsUtil.Feature.ColumnPacking.Core`](https://github.com/tomokuni/EsUtil/tree/main/EsUtil/Feature.ColumnPacking.Core)（NuGet: [`EsUtil.Feature.ColumnPacking.Core`](https://www.nuget.org/packages/EsUtil.Feature.ColumnPacking.Core)）
+> - パネル（UI 層）は [`EsUtil.Ui.WinUI3.ColumnPacking`](https://github.com/tomokuni/EsUtil/tree/main/EsUtil.Ui.WinUI3/ColumnPacking) などを参照してください。
+
 <!-- markdownlint-disable MD041 -- バッジを先頭に配置するため -->
 [![release](https://img.shields.io/github/v/release/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine?label=release)](https://github.com/tomokuni/EsUtil.Algorithm.MultiColumnLayoutEngine/releases)
 [![nuget](https://img.shields.io/nuget/v/EsUtil.Algorithm.MultiColumnLayoutEngine?label=nuget)](https://www.nuget.org/packages/EsUtil.Algorithm.MultiColumnLayoutEngine)
